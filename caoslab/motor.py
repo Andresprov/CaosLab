@@ -39,42 +39,47 @@ class Resultado:
     fallo_inyectado: bool = False
 
 
-def ejecutar_experimento(experimento, inyector, sonda, dormir=None):
+def ejecutar_experimento(experimento, inyector, sonda, dormir=None, avisar=None):
     parar = threading.Event()
     dormir = dormir or (lambda segundos: _esperar(parar, segundos))
+    avisar = avisar or (lambda texto: None)
     anteriores = _capturar_senales(parar)
     try:
         sonda.iniciar()
-        return _correr(experimento, inyector, sonda, dormir, parar)
+        return _correr(experimento, inyector, sonda, dormir, parar, avisar)
     finally:
         sonda.detener()
         _restaurar_senales(anteriores)
 
 
-def _correr(experimento, inyector, sonda, dormir, parar):
+def _correr(experimento, inyector, sonda, dormir, parar, avisar):
     resultado = Resultado(experimento, Conclusion.INTERRUMPIDO)
 
+    avisar(f"Midiendo la línea base durante {experimento.linea_base_s:g} s...")
     dormir(experimento.linea_base_s)
     muestras = sonda.recoger()
     if parar.is_set():
         return resultado
     resultado.muestras_linea_base = len(muestras)
     resultado.linea_base = evaluar_estado_estable(muestras, experimento.presupuesto)
+    avisar(f"Línea base: {_resumen(len(muestras), resultado.linea_base)}")
     if resultado.linea_base.estado is not Estado.CONTINUAR:
         resultado.conclusion = Conclusion.LINEA_BASE_INESTABLE
         return resultado
 
     try:
         resultado.fallo_inyectado = True
+        avisar(f"Inyectando el fallo: {inyector.descripcion}")
         inyector.inyectar()
-        resultado.conclusion = _vigilar(experimento, sonda, dormir, parar, resultado.ventanas)
+        resultado.conclusion = _vigilar(experimento, sonda, dormir, parar, resultado.ventanas, avisar)
     finally:
         inyector.revertir()
+        avisar("Fallo revertido.")
 
     return resultado
 
 
-def _vigilar(experimento, sonda, dormir, parar, ventanas):
+def _vigilar(experimento, sonda, dormir, parar, ventanas, avisar):
     total = math.ceil(experimento.duracion_s / experimento.ventana_s)
     for numero in range(1, total + 1):
         dormir(experimento.ventana_s)
@@ -83,11 +88,19 @@ def _vigilar(experimento, sonda, dormir, parar, ventanas):
             return Conclusion.INTERRUMPIDO
         veredicto = evaluar_estado_estable(muestras, experimento.presupuesto)
         ventanas.append(Ventana(numero, len(muestras), veredicto))
+        avisar(f"Ventana {numero} de {total}: {_resumen(len(muestras), veredicto)}")
         if veredicto.estado is Estado.ABORTAR:
             return Conclusion.ABORTADO
     if all(v.veredicto.estado is Estado.MUESTRAS_INSUFICIENTES for v in ventanas):
         return Conclusion.SIN_EVIDENCIA
     return Conclusion.SUPERADO
+
+
+def _resumen(cantidad, veredicto):
+    return (
+        f"{cantidad} muestras, error {veredicto.tasa_error:.2%}, "
+        f"p95 {veredicto.latencia_p95_ms:.1f} ms -> {veredicto.estado.value}"
+    )
 
 
 def _esperar(parar, segundos):
