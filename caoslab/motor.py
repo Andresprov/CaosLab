@@ -34,6 +34,7 @@ class Resultado:
     experimento: Experimento
     conclusion: Conclusion
     linea_base: Veredicto | None = None
+    muestras_linea_base: int = 0
     ventanas: list[Ventana] = field(default_factory=list)
     fallo_inyectado: bool = False
 
@@ -57,6 +58,7 @@ def _correr(experimento, inyector, sonda, dormir, parar):
     muestras = sonda.recoger()
     if parar.is_set():
         return resultado
+    resultado.muestras_linea_base = len(muestras)
     resultado.linea_base = evaluar_estado_estable(muestras, experimento.presupuesto)
     if resultado.linea_base.estado is not Estado.CONTINUAR:
         resultado.conclusion = Conclusion.LINEA_BASE_INESTABLE
