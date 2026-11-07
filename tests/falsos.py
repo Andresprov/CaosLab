@@ -29,10 +29,11 @@ def fallidas(cantidad=10, latencia_ms=2000.0):
 
 
 class InyectorFalso:
-    def __init__(self, falla_al_inyectar=False):
+    def __init__(self, falla_al_inyectar=False, quedo_pausado=False):
         self.descripcion = "fallo falso en memoria"
         self.eventos = []
         self.falla_al_inyectar = falla_al_inyectar
+        self.quedo_pausado = quedo_pausado
 
     def inyectar(self):
         self.eventos.append("inyectar")
@@ -41,6 +42,9 @@ class InyectorFalso:
 
     def revertir(self):
         self.eventos.append("revertir")
+
+    def despausar_si_quedo_pausado(self):
+        return self.quedo_pausado
 
 
 class SondaFalsa:
