@@ -1,9 +1,11 @@
 import math
 import signal
 import threading
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 
+from caoslab.configuracion import Experimento
 from caoslab.estado_estable import evaluar_estado_estable
 from caoslab.modelos import Estado, Veredicto
 
@@ -29,7 +31,7 @@ class Ventana:
 
 @dataclass
 class Resultado:
-    experimento: object
+    experimento: Experimento
     conclusion: Conclusion
     linea_base: Veredicto | None = None
     ventanas: list[Ventana] = field(default_factory=list)
@@ -87,10 +89,12 @@ def _vigilar(experimento, sonda, dormir, parar, ventanas):
 
 
 def _esperar(parar, segundos):
-    restante = segundos
-    while restante > 0 and not parar.is_set():
+    limite = time.monotonic() + segundos
+    while not parar.is_set():
+        restante = limite - time.monotonic()
+        if restante <= 0:
+            return
         parar.wait(min(restante, 0.2))
-        restante -= 0.2
 
 
 def _capturar_senales(parar):
