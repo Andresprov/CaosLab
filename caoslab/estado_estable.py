@@ -1,5 +1,6 @@
 """Evaluación del estado estable de un experimento de caos (HU-01)."""
 
+import math
 from collections.abc import Sequence
 
 from caoslab.modelos import Estado, Muestra, PresupuestoError, Veredicto
@@ -43,8 +44,11 @@ def evaluar_estado_estable(
     fallidas = sum(1 for muestra in muestras if not muestra.exitosa)
     tasa_error = fallidas / len(muestras)
 
+    # Percentil 95 por el metodo de rango mas cercano: indice = ceil(0.95*n) - 1.
+    # Con int(0.95*n) y n = 20 el indice daba 19 (la ultima muestra) en vez de
+    # 18, asi que un unico pico aislado se tomaba como el p95.
     latencias = sorted(muestra.latencia_ms for muestra in muestras)
-    indice = int(0.95 * len(latencias))
+    indice = math.ceil(0.95 * len(latencias)) - 1
     latencia_p95 = latencias[indice]
 
     motivos = []
