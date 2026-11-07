@@ -20,9 +20,16 @@ class Manejador(BaseHTTPRequestHandler):
         pass
 
 
+class ServidorSilencioso(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        pass
+
+
 @pytest.fixture
 def servidor():
-    servidor = ThreadingHTTPServer(("127.0.0.1", 0), Manejador)
+    servidor = ServidorSilencioso(("127.0.0.1", 0), Manejador)
     hilo = threading.Thread(target=servidor.serve_forever, daemon=True)
     hilo.start()
     yield f"http://127.0.0.1:{servidor.server_port}"
