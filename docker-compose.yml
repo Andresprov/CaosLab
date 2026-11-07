@@ -1,0 +1,24 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: caoslab-db
+    environment:
+      POSTGRES_DB: pedidos
+      POSTGRES_USER: caoslab
+      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U caoslab -d pedidos"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  api:
+    build: ./app_demo
+    container_name: caoslab-api
+    environment:
+      URL_BD: postgresql://caoslab@db:5432/pedidos
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
