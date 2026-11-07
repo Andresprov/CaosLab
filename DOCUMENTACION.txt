@@ -62,3 +62,294 @@ cuenta como dentro del presupuesto; solo se aborta cuando se pasa.
 
 PERCENTIL_LATENCIA (0.95) es el percentil que se vigila y SIN_EVIDENCIA (0.0)
 es el valor que se reporta en las métricas cuando no hay muestras suficientes.
+
+
+3. La app demo (docker-compose.yml y app_demo/)
+
+Es la víctima del experimento. Son dos contenedores: caoslab-api, una API
+hecha con FastAPI, y caoslab-db, un PostgreSQL 16. Se levantan con
+"docker compose up -d --build".
+
+La API tiene tres rutas. GET /health solo contesta {"estado": "ok"} y no toca
+la base de datos; sirve para comprobar que el proceso de la API está vivo.
+GET /pedidos lista los pedidos guardados y POST /pedidos crea uno; esas dos sí
+dependen de la base.
+
+Cada petición abre su propia conexión con connect_timeout=1. Lo hice así a
+propósito: si la API reutilizara una conexión abierta, al pausar la base las
+peticiones se quedarían colgadas para siempre. Con el timeout, la API se rinde
+en unos 2 segundos y responde 503, que es como se comportaría un servicio real
+bien configurado.
+
+Al arrancar, la API crea la tabla de pedidos si no existe y mete tres pedidos
+de ejemplo si está vacía. Eso va en la función ciclo_de_vida, que es la forma
+actual de FastAPI de correr algo al iniciar (on_event ya está en desuso).
+
+La base no expone ningún puerto hacia afuera, solo la ve la API dentro de la
+red de compose, y usa POSTGRES_HOST_AUTH_METHOD=trust. Así no hay ninguna
+contraseña ni archivo .env en el repositorio. Esto está bien para una app de
+pruebas en local; en un entorno real no se haría así.
+
+El healthcheck con pg_isready hace que la API espere a que la base esté lista
+antes de arrancar.
+
+
+4. experimento.yaml
+
+Describe un experimento. Los campos obligatorios son la hipótesis, la URL que
+se mide (objetivo.url), el contenedor que se pausa (objetivo.contenedor), el
+tipo de fallo, la duración y los dos límites del presupuesto. Lo demás tiene
+valores por defecto: 10 s de línea base, ventanas de 5 s, 5 peticiones por
+segundo, 2 s de timeout y mínimo 1 muestra.
+
+El ejemplo del repositorio pausa la base durante 30 s mientras mide /pedidos.
+Con la app demo la hipótesis falla y el experimento aborta en la primera
+ventana. Si se cambia la URL a /health, el experimento pasa, porque esa ruta no
+depende de la base.
+
+
+5. configuracion.py
+
+cargar_experimento(ruta) lee el YAML y devuelve un Experimento, que es un
+dataclass congelado con todos los campos ya validados. Así el resto del
+programa no vuelve a revisar si falta algo.
+
+Si el archivo no existe, si falta un campo obligatorio, si el tipo de fallo no
+es "pausar" o si alguna duración no es mayor que cero, lanza
+ErrorConfiguracion con un mensaje que dice exactamente qué está mal, por
+ejemplo "falta el campo obligatorio objetivo.contenedor".
+
+_obligatorio(datos, "objetivo", "contenedor") recorre el diccionario por esas
+claves y, si alguna no está, arma el nombre con puntos para el mensaje.
+
+ErrorConfiguracion hereda de ValueError porque en el fondo es un dato de
+entrada inválido, igual que los errores de evaluar_estado_estable(). Por eso
+el CLI atrapa los dos con el mismo except.
+
+Se usa yaml.safe_load y no yaml.load, porque safe_load no ejecuta nada que
+venga en el archivo.
+
+
+6. inyectores.py
+
+Inyector es la interfaz. Es un Protocol con un texto (descripcion) y dos
+métodos: inyectar() y revertir(). El motor solo conoce esto, no sabe nada de
+Docker. Para la entrega 2, agregar latencia, CPU o kill es escribir una clase
+nueva con esos dos métodos, sin tocar el motor.
+
+InyectorPausa es la única implementación por ahora. Recibe el nombre del
+contenedor y, opcionalmente, un cliente de Docker; si no se le pasa, crea uno
+con docker.from_env(). Poder pasarle el cliente es lo que permite probarlo con
+uno falso.
+
+inyectar() busca el contenedor, se asegura de que esté corriendo y lo pausa.
+Si no está corriendo no hace nada y lanza ErrorInyeccion, porque pausar algo
+que ya estaba caído no prueba nada.
+
+revertir() solo despausa si fue este mismo inyector el que pausó (lo recuerda
+en _lo_pause). Se puede llamar varias veces sin efecto extra. Esto importa
+porque revertir() va en un finally y se tiene que poder llamar aunque la
+inyección haya fallado a mitad de camino.
+
+despausar_si_quedo_pausado() es para el único caso que el finally no cubre: que
+alguien mate el proceso a la fuerza con el contenedor pausado. El CLI la llama
+antes de empezar y, si encuentra el contenedor pausado, lo despausa y avisa.
+
+_buscar() trae el contenedor y llama a reload() para tener su estado real del
+momento. Si no existe, convierte el NotFound de Docker en un ErrorInyeccion
+con el nombre del contenedor.
+
+Pausar usa el freezer de cgroups del kernel: los procesos del contenedor se
+congelan, pero el contenedor no se reinicia ni pierde memoria. Al despausar
+siguen exactamente donde iban. Por eso es un buen primer fallo: es fácil de
+revertir del todo.
+
+
+7. sonda.py
+
+SondaHTTP manda peticiones a la URL a un ritmo fijo y guarda una Muestra por
+cada respuesta. Tiene tres métodos: iniciar(), recoger() y detener().
+
+Por dentro hay dos piezas. Un hilo (_disparar) que cada 1/peticiones_por_segundo
+segundos encola una petición, y un ThreadPoolExecutor que las ejecuta. Las
+separé porque si un solo hilo hiciera las peticiones una tras otra, al pausar
+la base cada petición tardaría 2 s y en una ventana de 5 s solo entrarían dos o
+tres muestras. Eso daría MUESTRAS_INSUFICIENTES en vez de ABORTAR, y el
+experimento nunca se detendría justo cuando más se necesita. Con el pool, el
+ritmo se mantiene aunque el servicio esté colgado.
+
+El tamaño del pool es peticiones_por_segundo * timeout_s + 2, que alcanza para
+tener todas las peticiones que pueden estar esperando al mismo tiempo.
+
+_disparar calcula el momento de la siguiente petición sumando el intervalo, en
+vez de dormir un intervalo fijo después de cada envío; así el ritmo no se va
+corriendo con el tiempo.
+
+_medir hace la petición con urllib y mide el tiempo con time.perf_counter().
+Cuenta como exitosa una respuesta 2xx o 3xx. Un 4xx, un 5xx, un timeout o un
+error de conexión cuentan como fallidas, con el tiempo que se alcanzó a
+esperar.
+
+recoger() entrega las muestras acumuladas desde la última vez y vacía la
+lista. Usa un Lock porque los hilos del pool escriben en la misma lista
+mientras el motor la lee.
+
+detener() avisa al hilo que pare, lo espera y espera a que terminen las
+peticiones que estaban en vuelo (como mucho timeout_s).
+
+Usa urllib de la librería estándar y no requests, para respetar el ADR-001.
+El ProxyHandler({}) es para que no use un proxy del sistema por accidente al
+hablar con localhost.
+
+
+8. motor.py
+
+ejecutar_experimento(experimento, inyector, sonda, dormir, avisar) es el
+corazón de la entrega. Devuelve un Resultado con la conclusión, el veredicto
+de la línea base, cuántas muestras tuvo, la lista de ventanas evaluadas y si
+el fallo llegó a inyectarse.
+
+dormir y avisar son opcionales. En uso real, dormir espera de verdad y avisar
+imprime el progreso. En las pruebas se pasa un dormir que no espera nada, y
+así las pruebas del motor corren en milisegundos.
+
+El orden es este:
+
+- Arranca la sonda.
+- Espera la línea base y la evalúa con evaluar_estado_estable(). Si no da
+  CONTINUAR, no inyecta y termina con LINEA_BASE_INESTABLE. No tiene sentido
+  culpar al fallo de algo que ya estaba mal antes.
+- Inyecta el fallo.
+- Por cada ventana espera ventana_s, recoge las muestras de esa ventana y las
+  evalúa. Si una da ABORTAR, para ahí mismo con ABORTADO. La cantidad de
+  ventanas es la duración entre el tamaño de ventana, redondeado hacia arriba.
+- Al final, si ninguna ventana juntó muestras suficientes, la conclusión es
+  SIN_EVIDENCIA. Si no, SUPERADO.
+
+Cada ventana se evalúa solo con sus propias muestras, no con todas las
+acumuladas. Así el veredicto refleja lo que está pasando ahora y no se diluye
+con lo que pasó antes.
+
+evaluar_estado_estable() se usa tal cual, sin cambiarle nada.
+
+La reversión garantizada funciona en dos capas.
+
+La primera es el try/finally. inyector.revertir() está en el finally que
+envuelve la inyección y el ciclo de ventanas, así que corre si todo termina
+bien, si se aborta, si salta cualquier excepción o si llega un
+KeyboardInterrupt. Hay otro finally más afuera que detiene la sonda y
+restaura los manejadores de señales.
+
+La segunda es la captura de señales. _capturar_senales instala un manejador
+para SIGINT (Ctrl+C), SIGTERM y SIGBREAK (Ctrl+Break en Windows) que no mata el
+proceso: solo marca un threading.Event llamado parar. El ciclo revisa ese
+evento después de cada espera y, si está marcado, sale con INTERRUMPIDO y pasa
+por el finally. La ventaja frente a dejar que salte KeyboardInterrupt es que
+un segundo Ctrl+C mientras se está revirtiendo no interrumpe la reversión.
+
+_esperar duerme en pedazos de máximo 0.2 s revisando el evento, porque en
+Windows una espera larga no siempre se corta cuando llega la señal. Así el
+experimento reacciona a Ctrl+C en menos de 0.2 s.
+
+Las señales solo se pueden capturar desde el hilo principal; si el motor se
+llamara desde otro hilo, simplemente no las captura. Al terminar, los
+manejadores anteriores se dejan como estaban.
+
+Lo que ningún código puede atrapar es que maten el proceso a la fuerza
+(kill -9, taskkill /F, se va la luz). Para eso está
+despausar_si_quedo_pausado() en el inyector, que el CLI llama al empezar.
+
+
+9. informe.py
+
+generar_informe(resultado) arma un texto en markdown con la hipótesis, la
+configuración, la línea base, una tabla con cada ventana (muestras, tasa de
+error, p95 y estado), el veredicto con una frase que lo explica, los motivos
+si hubo y si el fallo se revirtió.
+
+Los motivos salen de la ventana que abortó o, si la línea base falló, de la
+línea base. Si la línea base falló por falta de muestras, el motivo dice
+cuántas juntó y cuántas hacían falta.
+
+escribir_informe(resultado, ruta) guarda ese mismo texto en un archivo. Es el
+mismo texto que se ve en la consola, así no hay dos versiones que se puedan
+contradecir.
+
+
+10. cli.py
+
+main() es lo que corre el comando "caoslab run experimento.yaml". El comando
+existe gracias a la sección [project.scripts] de pyproject.toml, que se
+instala con "pip install -e .".
+
+Carga el experimento, crea el inyector, revisa si el contenedor quedó pausado
+de una corrida anterior, crea la sonda, corre el motor, imprime el informe y
+lo guarda en informe.md o en la ruta que se pase con --informe.
+
+Devuelve 0 si el experimento se superó, 1 en cualquier otro final y 2 si hubo
+un error de configuración o Docker no respondió. Así se puede usar más
+adelante en un pipeline de CI sin leer el texto.
+
+main() recibe crear_inyector y crear_sonda como parámetros, con
+InyectorPausa y SondaHTTP por defecto. Las pruebas pasan los falsos y así el
+CLI se prueba completo sin Docker.
+
+Al empezar pone la salida en UTF-8 para que las tildes salgan bien en cualquier
+consola, y el progreso se imprime con flush=True. Esto último salió al
+verificar: con la salida redirigida, Python guardaba todo el texto y el
+progreso solo aparecía al final.
+
+
+11. Las pruebas
+
+Son 67 en total. Las 12 de la semana 5 no se tocaron.
+
+tests/falsos.py tiene el InyectorFalso (anota en una lista cada vez que lo
+llaman a inyectar o revertir) y la SondaFalsa (devuelve tandas de muestras
+preparadas y puede ejecutar algo en una llamada concreta, por ejemplo simular
+un Ctrl+C con signal.raise_signal). Con eso se prueba el motor sin Docker.
+
+test_reversion.py es la parte más importante: comprueba que se revierte ante
+una excepción, un KeyboardInterrupt, un Ctrl+C en la línea base y otro durante
+el fallo, un error al inyectar y un final normal, y que el manejador de Ctrl+C
+queda como estaba.
+
+test_sonda.py levanta un servidor HTTP de verdad en un hilo, dentro de la misma
+prueba, con rutas que responden bien, con 500 o con lentitud.
+
+Las que necesitan Docker están marcadas con @pytest.mark.integracion: una del
+inyector contra el contenedor real y dos de extremo a extremo. Con
+pytest -m "not integracion" corren las otras 64 sin Docker.
+
+
+12. Lo que se verificó a mano contra Docker real
+
+- experimento.yaml tal cual: línea base de 50 muestras con p95 de 31 ms; al
+  pausar la base, la primera ventana dio 93.75 % de error y p95 de 2031 ms, el
+  experimento abortó, salió con código 1 y la base quedó en running.
+- El mismo fallo midiendo /health: tres ventanas con 0 % de error, SUPERADO,
+  código 0.
+- Ctrl+Break con la base pausada a mitad del experimento: INTERRUMPIDO, el
+  fallo se revirtió y la base quedó en running.
+- taskkill /F con la base pausada: la base quedó en paused, como se esperaba.
+  La siguiente corrida avisó que había quedado pausada, la despausó y el
+  experimento corrió normal.
+
+Ctrl+C directamente en una consola no lo pude simular desde un script en
+Windows; ese camino lo cubren las pruebas con signal.raise_signal(SIGINT) y
+usa el mismo manejador que Ctrl+Break.
+
+
+13. Decisiones de diseño de esta entrega
+
+- PostgreSQL como base de la app demo, para que sea un contenedor aparte que
+  se pueda pausar.
+- En el ejemplo se pausa la base y no la API, para que el daño se vea en
+  /pedidos mientras /health sigue sana.
+- Timeout de 2 s en la sonda: una petición más lenta que eso cuenta como
+  fallida.
+- Ventanas de 5 s, cada una evaluada con sus propias muestras.
+- Línea base de 10 s; si no está sana, no se inyecta.
+- Códigos de salida 0, 1 y 2.
+- Python 3.11, que es lo que pide el README.
+- Sin comentarios ni docstrings en el código; todo está explicado aquí.

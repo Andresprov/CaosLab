@@ -166,33 +166,135 @@ evaluar_estado_estable(
 
 ---
 
+## Entrega 1: esqueleto caminante
+
+Un experimento de caos completo, de principio a fin, con un solo tipo de fallo:
+pausar un contenedor. CaosLab mide la línea base, pausa el contenedor, vigila la
+app por ventanas con `evaluar_estado_estable()` y aborta en cuanto el veredicto
+es `ABORTAR`. Pase lo que pase, el contenedor vuelve a quedar corriendo.
+
+### Cómo correr un experimento
+
+Necesitas Docker encendido y Python 3.11 o superior.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate        # en Windows: .venv\Scripts\activate
+pip install -r requirements.txt  # instala también el comando caoslab
+
+docker compose up -d --build     # levanta la app demo y su base de datos
+caoslab run experimento.yaml
+```
+
+El informe sale en consola y queda guardado en `informe.md` (se puede cambiar
+con `--informe otra_ruta.md`).
+
+| Código de salida | Significa |
+|---|---|
+| `0` | Experimento superado: el sistema aguantó el fallo dentro del presupuesto. |
+| `1` | Abortado, línea base inestable, sin evidencia suficiente o interrumpido. |
+| `2` | Configuración inválida, contenedor inexistente o Docker apagado. |
+
+### La app demo
+
+`docker-compose.yml` levanta dos contenedores:
+
+- `caoslab-api`: FastAPI en `http://localhost:8000` con `GET /health` (no toca
+  la base) y `GET /pedidos` / `POST /pedidos` (sí la tocan).
+- `caoslab-db`: PostgreSQL 16. No expone puertos fuera de la red de compose y
+  usa autenticación `trust`, así que no hay contraseñas ni `.env`.
+
+Cuando la base está pausada, `/pedidos` responde 503 en unos 2 segundos y
+`/health` sigue respondiendo normal.
+
+### experimento.yaml
+
+```yaml
+nombre: pausa de la base de datos
+hipotesis: >
+  Si la base de datos queda congelada durante 30 segundos, la API de pedidos
+  sigue respondiendo con menos de 5 % de errores y un p95 por debajo de 500 ms.
+objetivo:
+  url: http://localhost:8000/pedidos   # lo que mide la sonda
+  contenedor: caoslab-db               # lo que se pausa
+fallo:
+  tipo: pausar                         # único tipo en esta entrega
+duracion_s: 30                         # tiempo con el fallo inyectado
+linea_base_s: 10                       # opcional, por defecto 10
+ventana_s: 5                           # opcional, por defecto 5
+peticiones_por_segundo: 5              # opcional, por defecto 5
+timeout_s: 2                           # opcional, por defecto 2
+presupuesto:
+  max_tasa_error: 0.05
+  max_latencia_p95_ms: 500
+  minimo_muestras: 10                  # opcional, por defecto 1
+```
+
+Con la app demo esta hipótesis **no** se sostiene: el experimento aborta en la
+primera ventana, que es justo lo que queremos ver. Si cambias la URL a
+`/health`, el experimento se supera.
+
+### Cómo decide el motor
+
+1. Mide la línea base. Si no da `CONTINUAR` (ya está fuera del presupuesto o no
+   juntó muestras suficientes), no inyecta nada: `LINEA_BASE_INESTABLE`.
+2. Inyecta el fallo y evalúa cada ventana con las muestras de esa ventana.
+3. La primera ventana con `ABORTAR` detiene el experimento: `ABORTADO`.
+4. Una ventana con `MUESTRAS_INSUFICIENTES` no aborta. Si ninguna juntó
+   evidencia, el resultado es `SIN_EVIDENCIA` y no `SUPERADO`.
+5. Si todas las ventanas pasan: `SUPERADO`.
+
+### Reversión garantizada
+
+- `inyector.revertir()` está en un `finally`: corre si el experimento termina
+  bien, si aborta, si salta una excepción o si llega un `KeyboardInterrupt`.
+- Ctrl+C (SIGINT), SIGTERM y Ctrl+Break (SIGBREAK, en Windows) no matan el
+  proceso: piden una parada ordenada, el motor sale del ciclo en menos de 0.2 s,
+  revierte y deja el informe con `INTERRUMPIDO`.
+- Lo único que ningún código puede atrapar es matar el proceso a la fuerza
+  (`kill -9`, `taskkill /F`, apagar la máquina). Para eso, al empezar cada
+  corrida CaosLab revisa si el contenedor objetivo quedó pausado y, si es así,
+  lo despausa y lo avisa en consola.
+
+Todo esto se verificó contra Docker real: Ctrl+Break con la base pausada deja
+el contenedor en `running`; `taskkill /F` lo deja en `paused` y la siguiente
+corrida lo recupera.
+
+### Pendiente para la entrega 2
+
+- Otros tipos de fallo: latencia de red, consumo de CPU y matar el contenedor.
+  El motor ya trabaja contra la interfaz `Inyector` (`inyectar()` y
+  `revertir()`), así que solo hay que agregar clases nuevas.
+- Hipótesis generadas con IA.
+- Informe en HTML.
+- Histórico de experimentos.
+- Panel web.
+- Integración con CI.
+
+---
+
 ## Cómo ejecutar las pruebas
 
 ```bash
-git clone <url-del-repositorio>
-cd caoslab
-
-python -m venv .venv
-source .venv/bin/activate        # en Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-
-pytest
+pytest                          # todas (necesita Docker y la app levantada)
+pytest -m "not integracion"     # sin Docker: 64 pruebas
+pytest -m integracion           # solo las que usan Docker real: 3 pruebas
 ```
 
-Un solo comando (`pytest`) ejecuta las 12 pruebas desde la raíz del repositorio.
-Para ver el nombre de cada una:
+| Archivo | Qué prueba | Docker |
+|---|---|---|
+| `test_estado_estable.py` | HU-01, las 12 pruebas originales | No |
+| `test_configuracion.py` | lectura y validación de `experimento.yaml` | No |
+| `test_inyectores.py` | pausar y revertir con un cliente Docker falso, y una con el real | Una sí |
+| `test_reversion.py` | revertir ante excepción, Ctrl+C, KeyboardInterrupt y fallo al inyectar | No |
+| `test_sonda.py` | sonda HTTP contra un servidor local en un hilo | No |
+| `test_motor.py` | línea base, ventanas, aborto y falta de evidencia | No |
+| `test_informe.py` | contenido del informe | No |
+| `test_cli.py` | comando `caoslab run` y sus códigos de salida | No |
+| `test_extremo_a_extremo.py` | experimento completo contra la app demo | Sí |
 
-```bash
-pytest -v
-```
-
-### Cobertura de las pruebas
-
-| Tipo | Pruebas |
-|---|---|
-| Casos normales (3) | sistema sano con todas las peticiones correctas; tasa de error que agota el presupuesto; tasa y latencia fuera de umbral a la vez (dos motivos) |
-| Casos límite (6) | tasa de error exactamente en el umbral; p95 exactamente en el umbral; lista vacía; una sola muestra; menos muestras que el mínimo; pico aislado en 20 muestras |
-| Casos de error (3) | latencia negativa; `max_tasa_error` fuera de rango; `minimo_muestras` inválido |
+Las pruebas del motor usan un inyector y una sonda falsos en memoria
+(`tests/falsos.py`).
 
 ---
 
@@ -200,19 +302,41 @@ pytest -v
 
 ```
 caoslab/
-├── README.md               # este archivo: historia, contrato y cómo probar
-├── bitacora_ia.md          # bitácora de uso del asistente de IA
-├── requirements.txt        # pytest
-├── .gitignore              # ignora .env, .venv, __pycache__
+├── README.md
+├── DOCUMENTACION.txt       # explicación de cada parte del código
+├── bitacora_ia.md
+├── pyproject.toml          # comando caoslab y marcador integracion
+├── requirements.txt
+├── docker-compose.yml      # app demo + PostgreSQL
+├── experimento.yaml        # experimento de ejemplo
+├── app_demo/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── main.py             # /health y /pedidos
 ├── caoslab/
-│   ├── __init__.py
 │   ├── modelos.py          # Muestra, PresupuestoError, Veredicto, Estado
-│   └── estado_estable.py   # evaluar_estado_estable(): la funcionalidad de la semana 5
+│   ├── estado_estable.py   # evaluar_estado_estable() (semana 5)
+│   ├── configuracion.py    # lee experimento.yaml
+│   ├── inyectores.py       # Inyector (interfaz) e InyectorPausa
+│   ├── sonda.py            # SondaHTTP en un hilo aparte
+│   ├── motor.py            # ejecutar_experimento() y la reversión garantizada
+│   ├── informe.py          # informe en markdown
+│   └── cli.py              # caoslab run
 └── tests/
-    └── test_estado_estable.py
 ```
 
-## Historial de commits de esta entrega
+## Dependencias
+
+| Librería | Para qué |
+|---|---|
+| `PyYAML` | leer `experimento.yaml`; la librería estándar no lee YAML |
+| `docker` | pausar y despausar el contenedor |
+| `pytest` | pruebas |
+
+La sonda usa `urllib` de la librería estándar, así se respeta el ADR-001.
+FastAPI, uvicorn y psycopg solo se instalan dentro de la imagen de la app demo.
+
+## Historial de commits de la semana 5
 
 | Momento | Mensaje |
 |---|---|
@@ -221,3 +345,5 @@ caoslab/
 | Pruebas en verde | `fix: calcula el p95 por rango más cercano (todas las pruebas en verde)` |
 | Refactorización | `refactor: separa validación, métricas y motivos en el estado estable` |
 | Documentación | `docs: contrato en el README y bitácora de uso de IA` |
+
+Los commits de la entrega 1 se ven con `git log`: cada paso tiene su commit de pruebas en rojo y su commit de implementación en verde.
