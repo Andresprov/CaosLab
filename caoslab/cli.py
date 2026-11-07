@@ -11,19 +11,22 @@ from caoslab.sonda import SondaHTTP
 
 
 def main(argv=None, crear_inyector=InyectorPausa, crear_sonda=SondaHTTP):
+    for flujo in (sys.stdout, sys.stderr):
+        if hasattr(flujo, "reconfigure"):
+            flujo.reconfigure(encoding="utf-8")
     argumentos = _leer_argumentos(argv)
 
     try:
         experimento = cargar_experimento(argumentos.archivo)
         inyector = crear_inyector(experimento.contenedor)
         if inyector.despausar_si_quedo_pausado():
-            print(
+            _avisar(
                 f"Aviso: el contenedor {experimento.contenedor} quedó pausado de una corrida "
                 "anterior que no terminó bien. Lo despausé antes de empezar."
             )
         sonda = crear_sonda(experimento.url, experimento.peticiones_por_segundo, experimento.timeout_s)
-        print(f"Experimento: {experimento.nombre}")
-        resultado = ejecutar_experimento(experimento, inyector, sonda, avisar=print)
+        _avisar(f"Experimento: {experimento.nombre}")
+        resultado = ejecutar_experimento(experimento, inyector, sonda, avisar=_avisar)
     except (ValueError, ErrorInyeccion) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2
@@ -46,3 +49,7 @@ def _leer_argumentos(argv):
     correr.add_argument("archivo", help="ruta del experimento, por ejemplo experimento.yaml")
     correr.add_argument("--informe", default="informe.md", help="dónde guardar el informe (por defecto informe.md)")
     return lector.parse_args(argv)
+
+
+def _avisar(texto):
+    print(texto, flush=True)
