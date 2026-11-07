@@ -1,0 +1,23 @@
+nombre: pausa de la base de datos
+
+hipotesis: >
+  Si la base de datos queda congelada durante 30 segundos, la API de pedidos
+  sigue respondiendo con menos de 5 % de errores y un p95 por debajo de 500 ms.
+
+objetivo:
+  url: http://localhost:8000/pedidos
+  contenedor: caoslab-db
+
+fallo:
+  tipo: pausar
+
+duracion_s: 30
+linea_base_s: 10
+ventana_s: 5
+peticiones_por_segundo: 5
+timeout_s: 2
+
+presupuesto:
+  max_tasa_error: 0.05
+  max_latencia_p95_ms: 500
+  minimo_muestras: 10
