@@ -1,0 +1,64 @@
+CAOSLAB - DOCUMENTACION DEL CODIGO
+Andrés David Trujillo
+Seminario de IA en Ingeniería de Software
+
+El código del proyecto no lleva comentarios ni docstrings. Preferí dejar las
+explicaciones en este archivo para que los módulos se lean limpios y aquí se
+pueda contar con calma por qué cada parte está hecha como está.
+
+
+1. modelos.py
+
+Aquí están los cuatro tipos con los que trabaja todo lo demás.
+
+Estado es el resultado de evaluar una ventana del experimento. Tiene tres
+valores: CONTINUAR, ABORTAR y MUESTRAS_INSUFICIENTES. Hereda de str para que al
+imprimirlo o guardarlo en el informe salga como texto normal.
+
+Muestra es una sola petición que hizo la sonda. Guarda si salió bien (exitosa)
+y cuánto se demoró (latencia_ms). La latencia nunca puede ser negativa; si
+llega una así es un error de quien la midió, no un dato del sistema.
+
+PresupuestoError son los límites que el equipo acepta antes de inyectar el
+fallo: la tasa de error máxima (entre 0 y 1), la latencia p95 máxima en
+milisegundos (mayor que 0) y cuántas muestras como mínimo hacen falta para
+decidir algo (por defecto 1).
+
+Veredicto es la respuesta: el estado, la tasa de error y el p95 que se
+calcularon, y los motivos cuando hay que abortar.
+
+Las cuatro clases son frozen=True. Lo hice así porque una decisión de abortar
+debería quedar tal cual se tomó; si alguien pudiera cambiar un veredicto
+después, el informe dejaría de ser confiable.
+
+
+2. estado_estable.py
+
+evaluar_estado_estable(muestras, presupuesto) es la funcionalidad de la semana
+5 (HU-01). Recibe las muestras de una ventana y el presupuesto, y contesta si el
+experimento puede seguir o hay que pararlo.
+
+Es una función pura: no mira el reloj, no escribe archivos, no usa la red y no
+cambia la lista que recibe. Gracias a eso se prueba sin Docker.
+
+Los pasos son estos:
+
+- Primero valida. Si el presupuesto está fuera de rango o alguna muestra tiene
+  latencia negativa, lanza ValueError con un mensaje que dice cuál dato está
+  mal.
+- Si hay menos muestras que minimo_muestras devuelve MUESTRAS_INSUFICIENTES con
+  las métricas en 0.0. Sin evidencia no se toma una decisión destructiva.
+- Calcula la tasa de error: fallidas sobre total.
+- Calcula el p95 por rango más cercano. Ordena las latencias y toma la posición
+  ceil(0.95 * n) - 1. Con 20 valores eso da la posición 18 (la 19 de 20), así
+  que un único pico aislado queda por encima y no mueve el resultado. Este
+  método no interpola, siempre devuelve una latencia que de verdad se midió.
+  No usé numpy por el ADR-001 (el núcleo solo usa la librería estándar).
+- Compara cada métrica contra su límite por separado y anota todos los motivos,
+  no solo el primero.
+
+Los umbrales son inclusivos (ADR-002). Quedar exactamente en el límite todavía
+cuenta como dentro del presupuesto; solo se aborta cuando se pasa.
+
+PERCENTIL_LATENCIA (0.95) es el percentil que se vigila y SIN_EVIDENCIA (0.0)
+es el valor que se reporta en las métricas cuando no hay muestras suficientes.
