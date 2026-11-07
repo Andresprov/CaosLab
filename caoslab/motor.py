@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from caoslab.estado_estable import evaluar_estado_estable
-from caoslab.modelos import Veredicto
+from caoslab.modelos import Estado, Veredicto
 
 SENALES_DE_PARADA = [
     getattr(signal, nombre) for nombre in ("SIGINT", "SIGTERM", "SIGBREAK") if hasattr(signal, nombre)
@@ -14,6 +14,9 @@ SENALES_DE_PARADA = [
 
 class Conclusion(str, Enum):
     SUPERADO = "SUPERADO"
+    ABORTADO = "ABORTADO"
+    LINEA_BASE_INESTABLE = "LINEA_BASE_INESTABLE"
+    SIN_EVIDENCIA = "SIN_EVIDENCIA"
     INTERRUMPIDO = "INTERRUMPIDO"
 
 
@@ -53,6 +56,9 @@ def _correr(experimento, inyector, sonda, dormir, parar):
     if parar.is_set():
         return resultado
     resultado.linea_base = evaluar_estado_estable(muestras, experimento.presupuesto)
+    if resultado.linea_base.estado is not Estado.CONTINUAR:
+        resultado.conclusion = Conclusion.LINEA_BASE_INESTABLE
+        return resultado
 
     try:
         resultado.fallo_inyectado = True
@@ -73,6 +79,10 @@ def _vigilar(experimento, sonda, dormir, parar, ventanas):
             return Conclusion.INTERRUMPIDO
         veredicto = evaluar_estado_estable(muestras, experimento.presupuesto)
         ventanas.append(Ventana(numero, len(muestras), veredicto))
+        if veredicto.estado is Estado.ABORTAR:
+            return Conclusion.ABORTADO
+    if all(v.veredicto.estado is Estado.MUESTRAS_INSUFICIENTES for v in ventanas):
+        return Conclusion.SIN_EVIDENCIA
     return Conclusion.SUPERADO
 
 
