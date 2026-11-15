@@ -3,14 +3,16 @@ from contextlib import asynccontextmanager
 
 import psycopg
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 URL_BD = os.environ["URL_BD"]
+LARGO_MAXIMO_PRODUCTO = 100
+CANTIDAD_MAXIMA = 1000
 
 
 class PedidoNuevo(BaseModel):
-    producto: str
-    cantidad: int
+    producto: str = Field(min_length=1, max_length=LARGO_MAXIMO_PRODUCTO)
+    cantidad: int = Field(gt=0, le=CANTIDAD_MAXIMA)
 
 
 def conectar():
