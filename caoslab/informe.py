@@ -19,7 +19,8 @@ def generar_informe(resultado):
         f"- Objetivo: {experimento.url}",
         f"- Fallo: {experimento.tipo_fallo} el contenedor {experimento.contenedor}",
         f"- Duración: {experimento.duracion_s:g} s en ventanas de {experimento.ventana_s:g} s",
-        f"- Sonda: {experimento.peticiones_por_segundo:g} peticiones por segundo, timeout de {experimento.timeout_s:g} s",
+        f"- Sonda: {experimento.peticiones_por_segundo:g} peticiones por segundo, "
+        f"timeout de {experimento.timeout_s:g} s",
         f"- Presupuesto: tasa de error máxima {_porcentaje(presupuesto.max_tasa_error)}, "
         f"p95 máximo {presupuesto.max_latencia_p95_ms:g} ms, "
         f"mínimo {presupuesto.minimo_muestras} muestras por ventana",
@@ -92,7 +93,10 @@ def _explicacion(resultado):
         return "la hipótesis se sostiene, el sistema se mantuvo dentro del presupuesto durante todo el fallo."
     if conclusion is Conclusion.ABORTADO:
         numero = resultado.ventanas[-1].numero
-        return f"la hipótesis no se sostiene, en la ventana {numero} se agotó el presupuesto y el experimento se detuvo."
+        return (
+            f"la hipótesis no se sostiene, en la ventana {numero} se agotó el presupuesto "
+            "y el experimento se detuvo."
+        )
     if conclusion is Conclusion.LINEA_BASE_INESTABLE:
         return "no se inyectó el fallo porque el sistema no estaba estable antes de empezar."
     if conclusion is Conclusion.SIN_EVIDENCIA:
