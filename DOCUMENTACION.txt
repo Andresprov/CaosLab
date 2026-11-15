@@ -2,9 +2,9 @@ CAOSLAB - DOCUMENTACION DEL CODIGO
 Andrés David Trujillo
 Seminario de IA en Ingeniería de Software
 
-El código del proyecto no lleva comentarios ni docstrings. Preferí dejar las
-explicaciones en este archivo para que los módulos se lean limpios y aquí se
-pueda contar con calma por qué cada parte está hecha como está.
+Desde la semana 6 las funciones principales tienen docstrings con qué hacen,
+qué reciben, qué devuelven y qué errores lanzan. Este archivo sigue contando
+con calma por qué cada parte está hecha como está.
 
 
 1. modelos.py

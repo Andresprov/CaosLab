@@ -3,14 +3,16 @@ from contextlib import asynccontextmanager
 
 import psycopg
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 URL_BD = os.environ["URL_BD"]
+LARGO_MAXIMO_PRODUCTO = 100
+CANTIDAD_MAXIMA = 1000
 
 
 class PedidoNuevo(BaseModel):
-    producto: str
-    cantidad: int
+    producto: str = Field(min_length=1, max_length=LARGO_MAXIMO_PRODUCTO)
+    cantidad: int = Field(gt=0, le=CANTIDAD_MAXIMA)
 
 
 def conectar():
@@ -52,8 +54,8 @@ def listar_pedidos():
             filas = conexion.execute(
                 "SELECT id, producto, cantidad FROM pedidos ORDER BY id"
             ).fetchall()
-    except psycopg.OperationalError:
-        raise HTTPException(status_code=503, detail="base de datos no disponible")
+    except psycopg.OperationalError as error:
+        raise HTTPException(status_code=503, detail="base de datos no disponible") from error
     return [{"id": i, "producto": p, "cantidad": c} for i, p, c in filas]
 
 
@@ -65,6 +67,6 @@ def crear_pedido(pedido: PedidoNuevo):
                 "INSERT INTO pedidos (producto, cantidad) VALUES (%s, %s) RETURNING id",
                 (pedido.producto, pedido.cantidad),
             ).fetchone()[0]
-    except psycopg.OperationalError:
-        raise HTTPException(status_code=503, detail="base de datos no disponible")
+    except psycopg.OperationalError as error:
+        raise HTTPException(status_code=503, detail="base de datos no disponible") from error
     return {"id": nuevo_id, "producto": pedido.producto, "cantidad": pedido.cantidad}

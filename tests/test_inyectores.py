@@ -123,3 +123,23 @@ def test_pausa_y_despausa_el_contenedor_real_de_la_base_de_datos():
         inyector.revertir()
 
     assert cliente.containers.get("caoslab-db").status == "running"
+
+
+def test_no_acepta_un_contenedor_fuera_del_entorno_de_caoslab_aunque_exista():
+    contenedor = ContenedorFalso()
+    inyector = InyectorPausa("postgres-produccion", ClienteFalso(contenedor))
+
+    with pytest.raises(ErrorInyeccion, match="no está permitido"):
+        inyector.inyectar()
+
+    assert contenedor.pausas == 0
+
+
+def test_no_despausa_un_contenedor_fuera_del_entorno_de_caoslab():
+    contenedor = ContenedorFalso(status="paused")
+    inyector = InyectorPausa("postgres-produccion", ClienteFalso(contenedor))
+
+    with pytest.raises(ErrorInyeccion, match="no está permitido"):
+        inyector.despausar_si_quedo_pausado()
+
+    assert contenedor.despausas == 0

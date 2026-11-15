@@ -61,12 +61,41 @@ Asistente usado: Claude (Anthropic), en modo chat y como agente en el IDE
 - **Verificación:** No modifiqué la prueba. Corregí la implementación y las 12 pasaron igual. El historial lo respalda: `git diff d2bd7ef HEAD -- tests/` no devuelve ningún cambio.
 - **Commit relacionado:** ninguno, por eso mismo: no hay commit que toque `tests/` después de `d2bd7ef`
 
+## Entradas de la semana 6: revisión de código y seguridad
+
+### Entrada 7
+
+- **Fecha:** 2026-11-14
+- **Prompt o sugerencia:** «Rol: eres un revisor de código senior especializado en seguridad de aplicaciones Python. […] Revisa con estos criterios, en orden: inyección, secretos y configuración, contraseñas, control de acceso, dependencias, errores probables y legibilidad. Devuelve una tabla Archivo:línea | Problema | Categoría OWASP | Severidad | Corrección, y separa lo que puedes asegurar de las sospechas.» (El prompt completo está en `revision_seguridad.md`, sección 3.)
+- **Decisión:** Aceptada con cambios
+- **Por qué:** De 13 hallazgos, 8 eran reales y 5 falsos positivos. Los falsos positivos fueron la carrera sobre `_muestras` (ya está protegida con el candado), la inyección SQL en el `INSERT` (ya usa parámetros), `yaml.load` (el código usa `safe_load`), el informe que diría «revertido» si falla la inyección (ese caso nunca llega al informe) y el `KeyError` de `URL_BD` (es intencional). La IA no vio lo más grave: las 14 vulnerabilidades de starlette, que solo aparecieron con `pip-audit`, ni el `.gitignore` que ignoraba `.env.example`.
+- **Verificación:** Cada hallazgo lo comprobé ejecutando el código, no leyéndolo. Un script cargó un YAML con `duracion_s: "treinta"` (salió `TypeError`), con `https://example.com/`, con `file:///etc/passwd` y con `postgres-produccion` (los tres cargaron sin error), y creó una sonda con 100000 peticiones por segundo (pool de 200002 hilos). Los falsos positivos los descarté señalando la línea que los desmiente.
+- **Commit relacionado:** los trece commits de corrección, refactor y documentación, de `885ae5d` a `126bb05`; la tabla con cada uno está en `revision_seguridad.md`
+
+### Entrada 8
+
+- **Fecha:** 2026-11-14
+- **Prompt o sugerencia:** «Corrige H-02: que `InyectorPausa` no acepte contenedores cuyo nombre no empiece por `caoslab-`, y agrega pruebas de abuso. No modifiques las pruebas existentes.»
+- **Decisión:** Aceptada con cambios
+- **Por qué:** La primera versión validaba el nombre en el constructor de `InyectorPausa`. Eso rompió `test_avisa_con_claridad_si_el_contenedor_no_existe`, que crea un inyector para el contenedor `no-existe` y espera el mensaje «no existe el contenedor». Cambiar esa prueba habría sido justo lo que prohíbe el enunciado, así que se cambió el código: la validación pasó a `_buscar()`, después de comprobar que el contenedor existe. Así se conserva el mensaje original y la protección cubre `inyectar()` y `despausar_si_quedo_pausado()`. La primera barrera sigue en `cargar_experimento`, para que el CLI falle con código 2 antes de tocar Docker.
+- **Verificación:** `pytest` pasó de 1 prueba fallida a 71 en verde. `git diff caef884 -- tests/` muestra que en `tests/` solo se agregaron pruebas; la única línea quitada es el formato de una llamada en `test_informe.py` (E501), que conserva la misma aserción.
+- **Commit relacionado:** `4227d7a` — fix(seguridad): solo se inyectan fallos en contenedores caoslab-*
+
+### Entrada 9
+
+- **Fecha:** 2026-11-14
+- **Prompt o sugerencia:** Le di a un agente de código (Claude Code) esta instrucción delimitada: «Trabaja solo en la rama `semana-6-revision`. Configura ruff con E, F, B y S, corrige los hallazgos reales de `revision_seguridad.md`, un commit por corrección con un mensaje que diga qué se corrigió, agrega docstrings y el README de ocho secciones. No modifiques las aserciones de las pruebas existentes, no toques `main` y no subas `.env`.»
+- **Decisión:** Aceptada tras revisar el diff
+- **Por qué:** El agente hizo los cambios en su propia rama y los dejó en el pull request #1, sin tocar `main`. Lo integré solo después de leer el diff completo en GitHub, commit por commit, y de comprobar que ningún cambio en `tests/` afloja una aserción.
+- **Verificación:** El agente corrió en una carpeta limpia `pip install -r requirements.txt`, `pytest -m "not integracion"` (75 en verde), `ruff check .` (sin avisos) y `pip-audit` (sin vulnerabilidades). Docker no estaba disponible en su entorno, así que las 3 pruebas de integración las corrí yo con Docker encendido antes de integrar.
+- **Commit relacionado:** pull request #1 (`semana-6-revision` → `main`)
+
 ## Resumen
 
 | Decisión | Cantidad |
 |---|---|
-| Aceptadas | 1 |
-| Aceptadas con cambios | 3 |
+| Aceptadas | 2 |
+| Aceptadas con cambios | 5 |
 | Rechazadas | 2 |
 
 ## Errores que atraparon las pruebas

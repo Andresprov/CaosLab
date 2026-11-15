@@ -5,6 +5,16 @@ from caoslab.motor import Conclusion
 
 
 def generar_informe(resultado):
+    """Arma el informe del experimento en markdown.
+
+    Recibe:
+        resultado: el Resultado que devolvió ejecutar_experimento().
+
+    Devuelve:
+        Texto markdown con hipótesis, configuración, línea base, tabla de ventanas,
+        veredicto con su explicación, motivos (si abortó o la línea base fue inestable)
+        y si el fallo se revirtió. No lanza errores propios.
+    """
     experimento = resultado.experimento
     presupuesto = experimento.presupuesto
     lineas = [
@@ -19,7 +29,8 @@ def generar_informe(resultado):
         f"- Objetivo: {experimento.url}",
         f"- Fallo: {experimento.tipo_fallo} el contenedor {experimento.contenedor}",
         f"- Duración: {experimento.duracion_s:g} s en ventanas de {experimento.ventana_s:g} s",
-        f"- Sonda: {experimento.peticiones_por_segundo:g} peticiones por segundo, timeout de {experimento.timeout_s:g} s",
+        f"- Sonda: {experimento.peticiones_por_segundo:g} peticiones por segundo, "
+        f"timeout de {experimento.timeout_s:g} s",
         f"- Presupuesto: tasa de error máxima {_porcentaje(presupuesto.max_tasa_error)}, "
         f"p95 máximo {presupuesto.max_latencia_p95_ms:g} ms, "
         f"mínimo {presupuesto.minimo_muestras} muestras por ventana",
@@ -51,6 +62,15 @@ def generar_informe(resultado):
 
 
 def escribir_informe(resultado, ruta):
+    """Guarda el informe de generar_informe() en un archivo UTF-8, reemplazándolo si existe.
+
+    Recibe:
+        resultado: el Resultado del experimento.
+        ruta: dónde guardar el archivo.
+
+    Lanza:
+        OSError: si no se puede escribir en la ruta.
+    """
     Path(ruta).write_text(generar_informe(resultado), encoding="utf-8")
 
 
@@ -92,7 +112,10 @@ def _explicacion(resultado):
         return "la hipótesis se sostiene, el sistema se mantuvo dentro del presupuesto durante todo el fallo."
     if conclusion is Conclusion.ABORTADO:
         numero = resultado.ventanas[-1].numero
-        return f"la hipótesis no se sostiene, en la ventana {numero} se agotó el presupuesto y el experimento se detuvo."
+        return (
+            f"la hipótesis no se sostiene, en la ventana {numero} se agotó el presupuesto "
+            "y el experimento se detuvo."
+        )
     if conclusion is Conclusion.LINEA_BASE_INESTABLE:
         return "no se inyectó el fallo porque el sistema no estaba estable antes de empezar."
     if conclusion is Conclusion.SIN_EVIDENCIA:

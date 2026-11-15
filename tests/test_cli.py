@@ -93,3 +93,15 @@ def test_permite_elegir_donde_guardar_el_informe(carpeta):
     )
 
     assert (carpeta / "salida.md").exists()
+
+
+def test_un_contenedor_no_permitido_sale_con_codigo_2_sin_inyectar_nada(carpeta, capsys):
+    (carpeta / "experimento.yaml").write_text(
+        YAML_RAPIDO.replace("contenedor: caoslab-db", "contenedor: postgres-produccion"), encoding="utf-8"
+    )
+
+    codigo, inyector = correr([sanas(10)] * 5)
+
+    assert codigo == 2
+    assert inyector.eventos == []
+    assert "no está permitido" in capsys.readouterr().err

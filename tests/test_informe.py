@@ -19,7 +19,9 @@ def resultado(conclusion, ventanas=(), linea_base=SANO, fallo_inyectado=True):
 
 
 def test_el_motor_registra_cuantas_muestras_tuvo_la_linea_base():
-    hecho = ejecutar_experimento(experimento_de_prueba(), InyectorFalso(), SondaFalsa([sanas(7)] * 4), dormir=sin_esperar)
+    hecho = ejecutar_experimento(
+        experimento_de_prueba(), InyectorFalso(), SondaFalsa([sanas(7)] * 4), dormir=sin_esperar
+    )
 
     assert hecho.muestras_linea_base == 7
 

@@ -9,6 +9,17 @@ from caoslab.modelos import Muestra
 
 
 class SondaHTTP:
+    """Mide una URL a ritmo constante en un hilo aparte y guarda una Muestra por petición.
+
+    Una respuesta 2xx o 3xx es exitosa; un error HTTP, un timeout o una conexión
+    rechazada cuentan como fallidas. Ignora los proxies del sistema.
+
+    Recibe:
+        url: dirección a medir.
+        peticiones_por_segundo: ritmo de las peticiones.
+        timeout_s: segundos máximos de espera por petición.
+    """
+
     def __init__(self, url, peticiones_por_segundo, timeout_s):
         self.url = url
         self.intervalo = 1 / peticiones_por_segundo
@@ -21,14 +32,17 @@ class SondaHTTP:
         self._hilo = threading.Thread(target=self._disparar, name="sonda-http", daemon=True)
 
     def iniciar(self):
+        """Arranca el hilo que dispara las peticiones. Solo se puede llamar una vez (RuntimeError si se repite)."""
         self._hilo.start()
 
     def recoger(self):
+        """Devuelve las muestras acumuladas desde la última llamada y vacía la lista."""
         with self._candado:
             muestras, self._muestras = self._muestras, []
         return muestras
 
     def detener(self):
+        """Para de disparar peticiones y espera a que terminen las que estaban en curso."""
         self._parar.set()
         if self._hilo.is_alive():
             self._hilo.join()
