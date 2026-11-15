@@ -16,6 +16,24 @@ CODIGO_ERROR_DE_USO = 2
 
 
 def main(argv=None, crear_inyector=InyectorPausa, crear_sonda=SondaHTTP):
+    """Punto de entrada del comando caoslab run ARCHIVO [--informe RUTA].
+
+    Carga el experimento, despausa el contenedor si quedó pausado de una corrida
+    anterior, corre el experimento, imprime el informe y lo guarda en RUTA.
+
+    Recibe:
+        argv: argumentos de la línea de comandos; None usa sys.argv.
+        crear_inyector: fábrica del inyector a partir del nombre del contenedor.
+        crear_sonda: fábrica de la sonda a partir de url, peticiones por segundo y timeout.
+
+    Devuelve:
+        0 si el experimento se superó, 1 si abortó, la línea base fue inestable, no hubo
+        evidencia o se interrumpió, y 2 si la configuración es inválida, el contenedor no
+        existe o no está permitido, o Docker está apagado.
+
+    Lanza:
+        SystemExit: si los argumentos no son válidos (lo hace argparse).
+    """
     for flujo in (sys.stdout, sys.stderr):
         if hasattr(flujo, "reconfigure"):
             flujo.reconfigure(encoding="utf-8")

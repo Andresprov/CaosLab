@@ -20,11 +20,12 @@ CAMPOS_DEL_PRESUPUESTO = ("max_tasa_error", "max_latencia_p95_ms", "minimo_muest
 
 
 class ErrorConfiguracion(ValueError):
-    pass
+    """Error en el contenido de experimento.yaml. Hereda de ValueError."""
 
 
 @dataclass(frozen=True)
 class Experimento:
+    """Experimento ya validado, tal como lo usa el motor. Es inmutable."""
     nombre: str
     hipotesis: str
     url: str
@@ -39,6 +40,22 @@ class Experimento:
 
 
 def cargar_experimento(ruta) -> Experimento:
+    """Lee y valida un experimento descrito en un archivo YAML.
+
+    Recibe:
+        ruta: ruta del archivo, como texto o Path.
+
+    Devuelve:
+        Un Experimento con los valores por defecto aplicados a los campos opcionales
+        (VALORES_POR_DEFECTO y MINIMO_MUESTRAS_POR_DEFECTO).
+
+    Lanza:
+        ErrorConfiguracion: si el archivo no existe, falta un campo obligatorio, el tipo
+            de fallo no existe, la url no es http(s) hacia localhost, 127.0.0.1 o ::1, el
+            contenedor no empieza por caoslab-, un campo numérico no es un número o no es
+            mayor que 0, duracion_s pasa de 120 o peticiones_por_segundo pasa de 50.
+        yaml.YAMLError: si el archivo no es YAML válido.
+    """
     ruta = Path(ruta)
     if not ruta.exists():
         raise ErrorConfiguracion(f"el archivo {ruta} no existe")

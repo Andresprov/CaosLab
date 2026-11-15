@@ -31,6 +31,7 @@ class Ventana:
 
 @dataclass
 class Resultado:
+    """Lo que pasó en un experimento; es la entrada del informe."""
     experimento: Experimento
     conclusion: Conclusion
     linea_base: Veredicto | None = None
@@ -40,6 +41,30 @@ class Resultado:
 
 
 def ejecutar_experimento(experimento, inyector, sonda, dormir=None, avisar=None):
+    """Corre un experimento completo y garantiza que el fallo se revierta.
+
+    Inicia la sonda, mide la línea base y, solo si da CONTINUAR, inyecta el fallo y
+    evalúa una ventana tras otra hasta cumplir la duración o abortar. inyector.revertir()
+    corre en un finally y la sonda se detiene siempre. En el hilo principal, Ctrl+C,
+    SIGTERM y SIGBREAK piden una parada ordenada en vez de matar el proceso.
+
+    Recibe:
+        experimento: el Experimento a correr.
+        inyector: objeto con inyectar(), revertir() y descripcion (interfaz Inyector).
+        sonda: objeto con iniciar(), recoger() y detener(), como SondaHTTP.
+        dormir: función que espera N segundos; por defecto espera de verdad y se corta
+            si llega una señal de parada. Las pruebas pasan una que no espera.
+        avisar: función que recibe cada mensaje de progreso; por defecto no hace nada.
+
+    Devuelve:
+        Un Resultado con la conclusión (SUPERADO, ABORTADO, LINEA_BASE_INESTABLE,
+        SIN_EVIDENCIA o INTERRUMPIDO), la línea base, las ventanas evaluadas y si el
+        fallo llegó a inyectarse.
+
+    Lanza:
+        La excepción que lance inyector.inyectar() (por ejemplo ErrorInyeccion), después
+        de llamar a revertir(). ValueError si el presupuesto es inválido.
+    """
     parar = threading.Event()
     dormir = dormir or (lambda segundos: _esperar(parar, segundos))
     avisar = avisar or (lambda texto: None)

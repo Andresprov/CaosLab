@@ -5,6 +5,16 @@ from caoslab.motor import Conclusion
 
 
 def generar_informe(resultado):
+    """Arma el informe del experimento en markdown.
+
+    Recibe:
+        resultado: el Resultado que devolvió ejecutar_experimento().
+
+    Devuelve:
+        Texto markdown con hipótesis, configuración, línea base, tabla de ventanas,
+        veredicto con su explicación, motivos (si abortó o la línea base fue inestable)
+        y si el fallo se revirtió. No lanza errores propios.
+    """
     experimento = resultado.experimento
     presupuesto = experimento.presupuesto
     lineas = [
@@ -52,6 +62,15 @@ def generar_informe(resultado):
 
 
 def escribir_informe(resultado, ruta):
+    """Guarda el informe de generar_informe() en un archivo UTF-8, reemplazándolo si existe.
+
+    Recibe:
+        resultado: el Resultado del experimento.
+        ruta: dónde guardar el archivo.
+
+    Lanza:
+        OSError: si no se puede escribir en la ruta.
+    """
     Path(ruta).write_text(generar_informe(resultado), encoding="utf-8")
 
 

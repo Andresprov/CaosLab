@@ -11,6 +11,23 @@ def evaluar_estado_estable(
     muestras: Sequence[Muestra],
     presupuesto: PresupuestoError,
 ) -> Veredicto:
+    """Decide si un experimento puede seguir según las muestras de una ventana.
+
+    Recibe:
+        muestras: peticiones medidas en la ventana, en cualquier orden. No se modifican.
+        presupuesto: tasa de error máxima, latencia p95 máxima y muestras mínimas.
+
+    Devuelve:
+        Un Veredicto. Si hay menos muestras que presupuesto.minimo_muestras, el estado es
+        MUESTRAS_INSUFICIENTES con tasa y p95 en 0.0. Si no, calcula la tasa de error y el
+        p95 por rango más cercano y devuelve ABORTAR (con un motivo por cada límite
+        superado) o CONTINUAR. Los límites son inclusivos: igualar el máximo no aborta.
+
+    Lanza:
+        ValueError: si max_tasa_error no está entre 0 y 1, si max_latencia_p95_ms no es
+            mayor que 0, si minimo_muestras es menor que 1 o si alguna muestra tiene
+            latencia negativa.
+    """
     _validar_presupuesto(presupuesto)
     _validar_muestras(muestras)
 
