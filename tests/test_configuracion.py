@@ -116,3 +116,10 @@ def test_acepta_127_0_0_1_como_copia_local(tmp_path):
     ruta = escribir(tmp_path, YAML_COMPLETO.replace("http://localhost:8000/pedidos", "http://127.0.0.1:8000/pedidos"))
 
     assert cargar_experimento(ruta).url == "http://127.0.0.1:8000/pedidos"
+
+
+def test_rechaza_un_contenedor_que_no_es_del_entorno_de_caoslab(tmp_path):
+    ruta = escribir(tmp_path, YAML_COMPLETO.replace("contenedor: caoslab-db", "contenedor: postgres-produccion"))
+
+    with pytest.raises(ErrorConfiguracion, match="no está permitido"):
+        cargar_experimento(ruta)

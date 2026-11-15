@@ -2,6 +2,8 @@ from typing import Protocol, runtime_checkable
 
 import docker
 
+PREFIJO_CONTENEDOR_PERMITIDO = "caoslab-"
+
 
 class ErrorInyeccion(RuntimeError):
     pass
@@ -52,5 +54,10 @@ class InyectorPausa:
             contenedor = self.cliente.containers.get(self.contenedor)
         except docker.errors.NotFound:
             raise ErrorInyeccion(f"no existe el contenedor {self.contenedor}") from None
+        if not self.contenedor.startswith(PREFIJO_CONTENEDOR_PERMITIDO):
+            raise ErrorInyeccion(
+                f"el contenedor {self.contenedor} no está permitido: "
+                f"su nombre debe empezar por {PREFIJO_CONTENEDOR_PERMITIDO}"
+            )
         contenedor.reload()
         return contenedor

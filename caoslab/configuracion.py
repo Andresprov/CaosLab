@@ -4,6 +4,7 @@ from urllib.parse import urlsplit
 
 import yaml
 
+from caoslab.inyectores import PREFIJO_CONTENEDOR_PERMITIDO
 from caoslab.modelos import PresupuestoError
 
 TIPOS_DE_FALLO = ("pausar",)
@@ -62,6 +63,7 @@ def cargar_experimento(ruta) -> Experimento:
     )
 
     _validar_url(experimento.url)
+    _validar_contenedor(experimento.contenedor)
 
     for campo in ("duracion_s", "linea_base_s", "ventana_s", "peticiones_por_segundo", "timeout_s"):
         if getattr(experimento, campo) <= 0:
@@ -89,4 +91,12 @@ def _validar_url(url):
         raise ErrorConfiguracion(
             f"la url {url} apunta a {partes.hostname}; CaosLab solo mide la copia local "
             f"({', '.join(HOSTS_PERMITIDOS)})"
+        )
+
+
+def _validar_contenedor(contenedor):
+    if not str(contenedor).startswith(PREFIJO_CONTENEDOR_PERMITIDO):
+        raise ErrorConfiguracion(
+            f"el contenedor {contenedor} no está permitido; CaosLab solo inyecta fallos en contenedores "
+            f"cuyo nombre empieza por {PREFIJO_CONTENEDOR_PERMITIDO}"
         )
