@@ -1,11 +1,14 @@
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import yaml
 
 from caoslab.modelos import PresupuestoError
 
 TIPOS_DE_FALLO = ("pausar",)
+ESQUEMAS_PERMITIDOS = ("http", "https")
+HOSTS_PERMITIDOS = ("localhost", "127.0.0.1", "::1")
 
 
 class ErrorConfiguracion(ValueError):
@@ -58,6 +61,8 @@ def cargar_experimento(ruta) -> Experimento:
         ),
     )
 
+    _validar_url(experimento.url)
+
     for campo in ("duracion_s", "linea_base_s", "ventana_s", "peticiones_por_segundo", "timeout_s"):
         if getattr(experimento, campo) <= 0:
             raise ErrorConfiguracion(f"{campo} debe ser mayor que 0")
@@ -72,3 +77,16 @@ def _obligatorio(datos, *claves):
             raise ErrorConfiguracion(f"falta el campo obligatorio {'.'.join(claves)}")
         valor = valor[clave]
     return valor
+
+
+def _validar_url(url):
+    partes = urlsplit(str(url))
+    if partes.scheme not in ESQUEMAS_PERMITIDOS:
+        raise ErrorConfiguracion(
+            f"la url {url} debe usar {' o '.join(ESQUEMAS_PERMITIDOS)}; otros esquemas como file:// no se permiten"
+        )
+    if partes.hostname not in HOSTS_PERMITIDOS:
+        raise ErrorConfiguracion(
+            f"la url {url} apunta a {partes.hostname}; CaosLab solo mide la copia local "
+            f"({', '.join(HOSTS_PERMITIDOS)})"
+        )

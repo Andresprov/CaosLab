@@ -93,3 +93,26 @@ def test_rechaza_una_duracion_que_no_es_positiva(tmp_path):
 def test_falla_con_un_mensaje_claro_si_el_archivo_no_existe(tmp_path):
     with pytest.raises(ErrorConfiguracion, match="no existe"):
         cargar_experimento(tmp_path / "no_esta.yaml")
+
+
+# Pruebas de abuso de la semana 6: la sonda solo puede medir la copia local.
+
+
+def test_rechaza_una_url_que_apunta_a_un_servidor_remoto(tmp_path):
+    ruta = escribir(tmp_path, YAML_COMPLETO.replace("http://localhost:8000/pedidos", "https://produccion.example.com/pedidos"))
+
+    with pytest.raises(ErrorConfiguracion, match="solo mide la copia local"):
+        cargar_experimento(ruta)
+
+
+def test_rechaza_una_url_con_esquema_file(tmp_path):
+    ruta = escribir(tmp_path, YAML_COMPLETO.replace("http://localhost:8000/pedidos", "file:///etc/passwd"))
+
+    with pytest.raises(ErrorConfiguracion, match="file://"):
+        cargar_experimento(ruta)
+
+
+def test_acepta_127_0_0_1_como_copia_local(tmp_path):
+    ruta = escribir(tmp_path, YAML_COMPLETO.replace("http://localhost:8000/pedidos", "http://127.0.0.1:8000/pedidos"))
+
+    assert cargar_experimento(ruta).url == "http://127.0.0.1:8000/pedidos"
