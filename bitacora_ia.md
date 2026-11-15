@@ -70,7 +70,7 @@ Asistente usado: Claude (Anthropic), en modo chat y como agente en el IDE
 - **Decisión:** Aceptada con cambios
 - **Por qué:** De 13 hallazgos, 8 eran reales y 5 falsos positivos. Los falsos positivos fueron la carrera sobre `_muestras` (ya está protegida con el candado), la inyección SQL en el `INSERT` (ya usa parámetros), `yaml.load` (el código usa `safe_load`), el informe que diría «revertido» si falla la inyección (ese caso nunca llega al informe) y el `KeyError` de `URL_BD` (es intencional). La IA no vio lo más grave: las 14 vulnerabilidades de starlette, que solo aparecieron con `pip-audit`, ni el `.gitignore` que ignoraba `.env.example`.
 - **Verificación:** Cada hallazgo lo comprobé ejecutando el código, no leyéndolo. Un script cargó un YAML con `duracion_s: "treinta"` (salió `TypeError`), con `https://example.com/`, con `file:///etc/passwd` y con `postgres-produccion` (los tres cargaron sin error), y creó una sonda con 100000 peticiones por segundo (pool de 200002 hilos). Los falsos positivos los descarté señalando la línea que los desmiente.
-- **Commit relacionado:** los once commits de corrección, de `885ae5d` a `126bb05`; la tabla con cada uno está en `revision_seguridad.md`
+- **Commit relacionado:** los trece commits de corrección, refactor y documentación, de `885ae5d` a `126bb05`; la tabla con cada uno está en `revision_seguridad.md`
 
 ### Entrada 8
 
