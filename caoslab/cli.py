@@ -9,6 +9,11 @@ from caoslab.inyectores import ErrorInyeccion, InyectorPausa
 from caoslab.motor import Conclusion, ejecutar_experimento
 from caoslab.sonda import SondaHTTP
 
+INFORME_POR_DEFECTO = "informe.md"
+CODIGO_SUPERADO = 0
+CODIGO_NO_SUPERADO = 1
+CODIGO_ERROR_DE_USO = 2
+
 
 def main(argv=None, crear_inyector=InyectorPausa, crear_sonda=SondaHTTP):
     for flujo in (sys.stdout, sys.stderr):
@@ -29,17 +34,17 @@ def main(argv=None, crear_inyector=InyectorPausa, crear_sonda=SondaHTTP):
         resultado = ejecutar_experimento(experimento, inyector, sonda, avisar=_avisar)
     except (ValueError, ErrorInyeccion) as error:
         print(f"Error: {error}", file=sys.stderr)
-        return 2
+        return CODIGO_ERROR_DE_USO
     except docker.errors.DockerException as error:
         print(f"Error: no pude conectarme a Docker, revisa que esté encendido.\n{error}", file=sys.stderr)
-        return 2
+        return CODIGO_ERROR_DE_USO
 
     print()
     print(generar_informe(resultado))
     escribir_informe(resultado, argumentos.informe)
     print(f"Informe guardado en {argumentos.informe}")
 
-    return 0 if resultado.conclusion is Conclusion.SUPERADO else 1
+    return CODIGO_SUPERADO if resultado.conclusion is Conclusion.SUPERADO else CODIGO_NO_SUPERADO
 
 
 def _leer_argumentos(argv):
@@ -47,7 +52,9 @@ def _leer_argumentos(argv):
     comandos = lector.add_subparsers(dest="comando", required=True)
     correr = comandos.add_parser("run", help="corre un experimento descrito en un archivo YAML")
     correr.add_argument("archivo", help="ruta del experimento, por ejemplo experimento.yaml")
-    correr.add_argument("--informe", default="informe.md", help="dónde guardar el informe (por defecto informe.md)")
+    correr.add_argument(
+        "--informe", default=INFORME_POR_DEFECTO, help=f"dónde guardar el informe (por defecto {INFORME_POR_DEFECTO})"
+    )
     return lector.parse_args(argv)
 
 

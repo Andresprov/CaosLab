@@ -12,6 +12,11 @@ ESQUEMAS_PERMITIDOS = ("http", "https")
 HOSTS_PERMITIDOS = ("localhost", "127.0.0.1", "::1")
 DURACION_MAXIMA_S = 120
 MAX_PETICIONES_POR_SEGUNDO = 50
+NOMBRE_POR_DEFECTO = "experimento"
+VALORES_POR_DEFECTO = {"linea_base_s": 10, "ventana_s": 5, "peticiones_por_segundo": 5, "timeout_s": 2}
+MINIMO_MUESTRAS_POR_DEFECTO = 1
+CAMPOS_DE_TIEMPO_Y_CARGA = ("duracion_s", "linea_base_s", "ventana_s", "peticiones_por_segundo", "timeout_s")
+CAMPOS_DEL_PRESUPUESTO = ("max_tasa_error", "max_latencia_p95_ms", "minimo_muestras")
 
 
 class ErrorConfiguracion(ValueError):
@@ -40,48 +45,48 @@ def cargar_experimento(ruta) -> Experimento:
 
     datos = yaml.safe_load(ruta.read_text(encoding="utf-8")) or {}
 
+    experimento = _construir(datos)
+    _validar(experimento)
+    return experimento
+
+
+def _construir(datos):
     tipo_fallo = _obligatorio(datos, "fallo", "tipo")
     if tipo_fallo not in TIPOS_DE_FALLO:
         raise ErrorConfiguracion(
             f"el tipo de fallo '{tipo_fallo}' no existe; disponibles: {', '.join(TIPOS_DE_FALLO)}"
         )
-
-    experimento = Experimento(
-        nombre=datos.get("nombre", "experimento"),
+    opcionales = {campo: datos.get(campo, valor) for campo, valor in VALORES_POR_DEFECTO.items()}
+    return Experimento(
+        nombre=datos.get("nombre", NOMBRE_POR_DEFECTO),
         hipotesis=str(_obligatorio(datos, "hipotesis")).strip(),
         url=_obligatorio(datos, "objetivo", "url"),
         contenedor=_obligatorio(datos, "objetivo", "contenedor"),
         tipo_fallo=tipo_fallo,
         duracion_s=_obligatorio(datos, "duracion_s"),
-        linea_base_s=datos.get("linea_base_s", 10),
-        ventana_s=datos.get("ventana_s", 5),
-        peticiones_por_segundo=datos.get("peticiones_por_segundo", 5),
-        timeout_s=datos.get("timeout_s", 2),
+        **opcionales,
         presupuesto=PresupuestoError(
             max_tasa_error=_obligatorio(datos, "presupuesto", "max_tasa_error"),
             max_latencia_p95_ms=_obligatorio(datos, "presupuesto", "max_latencia_p95_ms"),
-            minimo_muestras=datos["presupuesto"].get("minimo_muestras", 1),
+            minimo_muestras=datos["presupuesto"].get("minimo_muestras", MINIMO_MUESTRAS_POR_DEFECTO),
         ),
     )
 
+
+def _validar(experimento):
     _validar_url(experimento.url)
     _validar_contenedor(experimento.contenedor)
-
-    numericos = ("duracion_s", "linea_base_s", "ventana_s", "peticiones_por_segundo", "timeout_s")
-    for campo in numericos:
+    for campo in CAMPOS_DE_TIEMPO_Y_CARGA:
         _validar_numero(campo, getattr(experimento, campo))
-    for campo in ("max_tasa_error", "max_latencia_p95_ms", "minimo_muestras"):
+    for campo in CAMPOS_DEL_PRESUPUESTO:
         _validar_numero(f"presupuesto.{campo}", getattr(experimento.presupuesto, campo))
-
-    for campo in numericos:
+    for campo in CAMPOS_DE_TIEMPO_Y_CARGA:
         if getattr(experimento, campo) <= 0:
             raise ErrorConfiguracion(f"{campo} debe ser mayor que 0")
     if experimento.duracion_s > DURACION_MAXIMA_S:
         raise ErrorConfiguracion(f"duracion_s no puede pasar de {DURACION_MAXIMA_S} s")
     if experimento.peticiones_por_segundo > MAX_PETICIONES_POR_SEGUNDO:
         raise ErrorConfiguracion(f"peticiones_por_segundo no puede pasar de {MAX_PETICIONES_POR_SEGUNDO}")
-
-    return experimento
 
 
 def _obligatorio(datos, *claves):
