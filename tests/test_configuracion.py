@@ -123,3 +123,34 @@ def test_rechaza_un_contenedor_que_no_es_del_entorno_de_caoslab(tmp_path):
 
     with pytest.raises(ErrorConfiguracion, match="no está permitido"):
         cargar_experimento(ruta)
+
+
+# Semana 6: datos mal escritos en el YAML deben dar ErrorConfiguracion y no un TypeError.
+
+
+def test_rechaza_un_campo_numerico_escrito_como_texto(tmp_path):
+    ruta = escribir(tmp_path, YAML_COMPLETO.replace("duracion_s: 30", 'duracion_s: "treinta"'))
+
+    with pytest.raises(ErrorConfiguracion, match="duracion_s debe ser un número"):
+        cargar_experimento(ruta)
+
+
+def test_rechaza_un_presupuesto_escrito_como_texto(tmp_path):
+    ruta = escribir(tmp_path, YAML_COMPLETO.replace("max_tasa_error: 0.05", "max_tasa_error: cinco"))
+
+    with pytest.raises(ErrorConfiguracion, match="presupuesto.max_tasa_error debe ser un número"):
+        cargar_experimento(ruta)
+
+
+def test_rechaza_una_duracion_mayor_a_dos_minutos(tmp_path):
+    ruta = escribir(tmp_path, YAML_COMPLETO.replace("duracion_s: 30", "duracion_s: 121"))
+
+    with pytest.raises(ErrorConfiguracion, match="no puede pasar de 120"):
+        cargar_experimento(ruta)
+
+
+def test_rechaza_demasiadas_peticiones_por_segundo(tmp_path):
+    ruta = escribir(tmp_path, YAML_COMPLETO.replace("peticiones_por_segundo: 10", "peticiones_por_segundo: 100000"))
+
+    with pytest.raises(ErrorConfiguracion, match="no puede pasar de 50"):
+        cargar_experimento(ruta)

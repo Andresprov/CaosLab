@@ -10,6 +10,8 @@ from caoslab.modelos import PresupuestoError
 TIPOS_DE_FALLO = ("pausar",)
 ESQUEMAS_PERMITIDOS = ("http", "https")
 HOSTS_PERMITIDOS = ("localhost", "127.0.0.1", "::1")
+DURACION_MAXIMA_S = 120
+MAX_PETICIONES_POR_SEGUNDO = 50
 
 
 class ErrorConfiguracion(ValueError):
@@ -65,9 +67,19 @@ def cargar_experimento(ruta) -> Experimento:
     _validar_url(experimento.url)
     _validar_contenedor(experimento.contenedor)
 
-    for campo in ("duracion_s", "linea_base_s", "ventana_s", "peticiones_por_segundo", "timeout_s"):
+    numericos = ("duracion_s", "linea_base_s", "ventana_s", "peticiones_por_segundo", "timeout_s")
+    for campo in numericos:
+        _validar_numero(campo, getattr(experimento, campo))
+    for campo in ("max_tasa_error", "max_latencia_p95_ms", "minimo_muestras"):
+        _validar_numero(f"presupuesto.{campo}", getattr(experimento.presupuesto, campo))
+
+    for campo in numericos:
         if getattr(experimento, campo) <= 0:
             raise ErrorConfiguracion(f"{campo} debe ser mayor que 0")
+    if experimento.duracion_s > DURACION_MAXIMA_S:
+        raise ErrorConfiguracion(f"duracion_s no puede pasar de {DURACION_MAXIMA_S} s")
+    if experimento.peticiones_por_segundo > MAX_PETICIONES_POR_SEGUNDO:
+        raise ErrorConfiguracion(f"peticiones_por_segundo no puede pasar de {MAX_PETICIONES_POR_SEGUNDO}")
 
     return experimento
 
@@ -79,6 +91,11 @@ def _obligatorio(datos, *claves):
             raise ErrorConfiguracion(f"falta el campo obligatorio {'.'.join(claves)}")
         valor = valor[clave]
     return valor
+
+
+def _validar_numero(campo, valor):
+    if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+        raise ErrorConfiguracion(f"{campo} debe ser un número, no {valor!r}")
 
 
 def _validar_url(url):
