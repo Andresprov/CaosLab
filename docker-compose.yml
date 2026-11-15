@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: pedidos
       POSTGRES_USER: caoslab
-      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?copia .env.example a .env y define POSTGRES_PASSWORD}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U caoslab -d pedidos"]
       interval: 2s
@@ -16,7 +16,7 @@ services:
     build: ./app_demo
     container_name: caoslab-api
     environment:
-      URL_BD: postgresql://caoslab@db:5432/pedidos
+      URL_BD: postgresql://caoslab:${POSTGRES_PASSWORD:?copia .env.example a .env y define POSTGRES_PASSWORD}@db:5432/pedidos
     ports:
       - "8000:8000"
     depends_on:
