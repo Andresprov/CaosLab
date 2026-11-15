@@ -1,4 +1,7 @@
-pytest>=8.0
-PyYAML>=6.0
-docker>=7.0
+# Versiones fijadas y probadas el 2026-11-14 (pip-audit sin vulnerabilidades conocidas)
+PyYAML==6.0.3
+docker==7.2.0
+pytest==9.2.0
+ruff==0.17.5
+pip-audit==2.10.1
 -e .
