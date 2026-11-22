@@ -277,7 +277,7 @@ corrida lo recupera.
 
 ```bash
 pytest                          # todas (necesita Docker y la app levantada)
-pytest -m "not integracion"     # sin Docker: 64 pruebas
+pytest -m "not integracion"     # sin Docker: 217 pruebas
 pytest -m integracion           # solo las que usan Docker real: 3 pruebas
 ```
 
@@ -292,6 +292,19 @@ pytest -m integracion           # solo las que usan Docker real: 3 pruebas
 | `test_informe.py` | contenido del informe | No |
 | `test_cli.py` | comando `caoslab run` y sus códigos de salida | No |
 | `test_extremo_a_extremo.py` | experimento completo contra la app demo | Sí |
+| `test_semana7_estado_estable.py` | particiones, límites y tabla de decisión de HU-01 | No |
+| `test_semana7_configuracion.py` | particiones y límites de `experimento.yaml` | No |
+| `test_semana7_motor.py` | tabla de decisión de la conclusión y límites de las ventanas | No |
+| `test_semana7_inyector.py` | estados del contenedor y tabla de decisión de `revertir()` | No |
+| `test_semana7_informe.py` | el informe por conclusión, con datos sintéticos | No |
+| `conftest.py` | datos de prueba sintéticos en fixtures | — |
+
+Las pruebas de la semana 7 están diseñadas con particiones de equivalencia,
+valores límite y tablas de decisión. El diseño completo, las pruebas generadas
+con IA que corregí o descarté, las ocho mutaciones con las que rompí el código a
+propósito y el origen de los datos sintéticos están en
+[`registro_pruebas.md`](registro_pruebas.md). Para repetir las mutaciones:
+`python herramientas/mutar.py`.
 
 Las pruebas del motor usan un inyector y una sonda falsos en memoria
 (`tests/falsos.py`).
@@ -305,6 +318,9 @@ caoslab/
 ├── README.md
 ├── DOCUMENTACION.txt       # explicación de cada parte del código
 ├── bitacora_ia.md
+├── registro_pruebas.md     # diseño de casos y revisión de las pruebas de IA
+├── herramientas/
+│   └── mutar.py            # aplica una mutación, corre la suite y la deshace
 ├── pyproject.toml          # comando caoslab y marcador integracion
 ├── requirements.txt
 ├── docker-compose.yml      # app demo + PostgreSQL
