@@ -186,12 +186,24 @@ Claude Code como agente, después de cerrar la HU-01. Todos llevan
 - **Verificación:** Revisé el README y la documentación generada, así como la estructura de las pruebas de integración y sus comprobaciones de recuperación de PostgreSQL. La ejecución de estas pruebas dependía de tener Docker disponible y operativo.
 - **Commits relacionados:** `8393fdb`, `caef884`
 
+## Entradas del informe final
+
+### Entrada 19
+
+- **Fecha:** 2026-11-26
+- **Prompt o sugerencia:** Le pedí a Claude Code que llenara conmigo la plantilla `informe_final_integrador.md` del proyecto integrador, usando el repositorio y lo que yo había escrito en la bitácora.
+- **Qué hizo la IA:** Redactó en `informe_final.md`, a partir de la bitácora, `revision_seguridad.md`, el README y el historial de commits, el borrador del resumen, la tabla de la IA en el ciclo de vida, cuatro casos de errores de la IA con enlaces a sus commits, el estado final del sistema, la reflexión ética y los aprendizajes. Para el dilema ético y los aprendizajes partió de mi entrada 6 y de mi reflexión final. Dejó marcados los enlaces a los documentos de los módulos 1 a 3, que no están en este repositorio.
+- **Decisión:** Aceptada con cambios
+- **Por qué:** Los datos del informe ya estaban en el repositorio y en la bitácora, y el agente los podía reunir y enlazar. Revisé que la reflexión y los aprendizajes dijeran lo que de verdad pensé y viví en el proyecto antes de entregarlo.
+- **Verificación:** El agente corrió `pytest -m "not integracion"` (81 en verde) para las cifras del estado final. Revisé que cada caso de la sección 4 coincidiera con su entrada de la bitácora y con su commit.
+- **Commit relacionado:** el commit que agrega `informe_final.md`
+
 ## Resumen
 
 | Decisión | Cantidad |
 |---|---|
 | Aceptadas | 7 |
-| Aceptadas con cambios | 9 |
+| Aceptadas con cambios | 10 |
 | Rechazadas | 2 |
 
 ## Errores que atraparon las pruebas
