@@ -76,9 +76,9 @@ def _construir(datos):
     opcionales = {campo: datos.get(campo, valor) for campo, valor in VALORES_POR_DEFECTO.items()}
     return Experimento(
         nombre=datos.get("nombre", NOMBRE_POR_DEFECTO),
-        hipotesis=str(_obligatorio(datos, "hipotesis")).strip(),
-        url=_obligatorio(datos, "objetivo", "url"),
-        contenedor=_obligatorio(datos, "objetivo", "contenedor"),
+        hipotesis=_texto(_obligatorio(datos, "hipotesis"), "hipotesis"),
+        url=_texto(_obligatorio(datos, "objetivo", "url"), "objetivo.url"),
+        contenedor=_texto(_obligatorio(datos, "objetivo", "contenedor"), "objetivo.contenedor"),
         tipo_fallo=tipo_fallo,
         duracion_s=_obligatorio(datos, "duracion_s"),
         **opcionales,
@@ -115,9 +115,16 @@ def _obligatorio(datos, *claves):
     return valor
 
 
+def _texto(valor, campo):
+    texto = str(valor).strip()
+    if not texto:
+        raise ErrorConfiguracion(f"el campo obligatorio {campo} está vacío")
+    return texto
+
+
 def _validar_numero(campo, valor):
     if isinstance(valor, bool) or not isinstance(valor, (int, float)):
-        raise ErrorConfiguracion(f"{campo} debe ser un número, no {valor!r}")
+        raise ErrorConfiguracion(f"{campo} debe ser un número, no {type(valor).__name__}: {valor!r}")
 
 
 def _validar_url(url):

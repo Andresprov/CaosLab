@@ -118,12 +118,13 @@ unos 2 segundos y `/health` sigue normal.
 ## 5. Pruebas
 
 ```bash
-pytest -m "not integracion"      # sin Docker: 75 pruebas
+pytest -m "not integracion"      # sin Docker: 234 pruebas (228 sin FastAPI instalado)
 pytest -m integracion            # con Docker y la app demo levantada: 3 pruebas
 pytest                           # todas
 ruff check .                     # linter (configurado en pyproject.toml): sin avisos
 pip-audit -r requirements.txt    # dependencias de CaosLab
 pip-audit -r app_demo/requirements.txt
+python herramientas/mutar.py     # las ocho mutaciones de la semana 7
 ```
 
 `tests/test_app_demo.py` prueba la validación de `POST /pedidos` sin Docker,
@@ -142,19 +143,38 @@ está instalado, pytest salta ese archivo.
 | `test_cli.py` | comando `caoslab run` y sus códigos de salida | No |
 | `test_app_demo.py` | validación de `POST /pedidos` | No |
 | `test_extremo_a_extremo.py` | experimento completo contra la app demo | Sí |
+| `test_semana7_estado_estable.py` | particiones, límites y tabla de decisión de HU-01 | No |
+| `test_semana7_configuracion.py` | particiones y límites de `experimento.yaml` | No |
+| `test_semana7_motor.py` | tabla de decisión de la conclusión y límites de las ventanas | No |
+| `test_semana7_inyector.py` | estados del contenedor y tabla de decisión de `revertir()` | No |
+| `test_semana7_informe.py` | el informe por conclusión, con datos sintéticos | No |
+| `conftest.py` | datos de prueba sintéticos en fixtures | — |
+
+Las pruebas de la semana 7 están diseñadas con particiones de equivalencia,
+valores límite y tablas de decisión. El diseño completo, las pruebas generadas
+con IA que corregí o descarté, las ocho mutaciones con las que rompí el código a
+propósito y el origen de los datos sintéticos están en
+[`registro_pruebas.md`](registro_pruebas.md). Para repetir las mutaciones:
+`python herramientas/mutar.py`.
 
 ## 6. Estructura
 
 ```
 CaosLab/
 ├── README.md
+├── informe_final.md       # informe final del proyecto integrador
 ├── revision_seguridad.md   # informe de revisión de código y seguridad (semana 6)
+├── registro_pruebas.md     # diseño de casos y revisión de las pruebas de IA (semana 7)
 ├── bitacora_ia.md          # registro de uso de IA
 ├── DOCUMENTACION.txt       # por qué cada parte del código está hecha así
 ├── LICENSE
 ├── pyproject.toml          # paquete, comando caoslab, pytest y ruff
 ├── requirements.txt        # versiones fijadas
 ├── .env.example            # copia como .env
+├── .github/workflows/
+│   └── ci.yml              # pipeline: ruff, pruebas, pip-audit e integración con Docker
+├── herramientas/
+│   └── mutar.py            # aplica una mutación, corre la suite y la deshace
 ├── docker-compose.yml      # app demo + PostgreSQL
 ├── experimento.yaml        # experimento de ejemplo
 ├── docs/
