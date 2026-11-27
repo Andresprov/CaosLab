@@ -207,10 +207,10 @@ así, lo despausa.
 |---|---|---|---|---|
 | Partición válida | Contenedor corriendo | `status = running` | se pausa una vez | `test_pausa_el_contenedor_cuando_esta_corriendo` |
 | Partición inválida | Estados que no se pueden pausar | `paused`, `exited`, `created`, `restarting`, `dead` | `ErrorInyeccion` que nombra el estado, 0 pausas | `test_un_contenedor_que_no_esta_corriendo_lanza_error_inyeccion[…]` |
-| Partición inválida | Contenedor inexistente | Docker lanza `NotFound` | `ErrorInyeccion` «no existe el contenedor pedidos-db» | `test_un_contenedor_que_no_existe_lanza_error_inyeccion` |
+| Partición inválida | Contenedor inexistente | Docker lanza `NotFound` | `ErrorInyeccion` «no existe el contenedor caoslab-pedidos-db» | `test_un_contenedor_que_no_existe_lanza_error_inyeccion` |
 | Límite | Revertir dos veces | revertir repetido tras una pausa | una sola despausa | `test_revertir_dos_veces_despausa_una_sola_vez` |
 | Partición válida | Rescate de una corrida anterior | `paused` / `running` / `exited` | `True` y 1 despausa / `False` y 0 / `False` y 0 | `test_despausar_si_quedo_pausado[…]` |
-| Partición válida | Descripción para la consola | contenedor `pedidos-db` | «pausar el contenedor pedidos-db» | `test_la_descripcion_nombra_el_contenedor_objetivo` |
+| Partición válida | Descripción para la consola | contenedor `caoslab-pedidos-db` | «pausar el contenedor caoslab-pedidos-db» | `test_la_descripcion_nombra_el_contenedor_objetivo` |
 
 #### Tabla de decisión de `revertir()`
 
@@ -283,7 +283,7 @@ De las 11 pruebas del primer borrador: **4 conservadas con cambios de forma,
 | `test_presupuesto_invalido_lanza_excepcion`: `pytest.raises(Exception)` | Descartada | `Exception` atrapa cualquier cosa, hasta un `AttributeError` por un error de tipeo en el nombre de un campo. La tarea pide el tipo exacto. | `test_presupuesto_invalido_lanza_value_error`, 7 filas con `ValueError` y `match` del campo que está mal |
 | `test_archivo_inexistente_lanza_error`: `pytest.raises(Exception)` | Conservada con cambios | El caso sí es del contrato, pero el tipo era demasiado amplio. | `test_un_archivo_que_no_existe_lanza_error_configuracion`, con `ErrorConfiguracion` y `match="no existe"` |
 | `test_duracion_cero_lanza_error_configuracion` | Conservada con cambios | El caso es correcto y el tipo también, pero probaba un solo campo y un solo lado del borde. | `test_limites_de_los_campos_que_deben_ser_positivos`, 15 filas: −1, 0 y 0.1 por cada uno de los 5 campos positivos |
-| `test_duracion_texto_lanza_error_configuracion`: `duracion_s: treinta` | Conservada, **reveló el defecto D-01** | La prueba falló con `TypeError: '<=' not supported between instances of 'str' and 'int'`. No era un esperado mal puesto: el cargador comparaba el valor con 0 sin revisar que fuera un número, y el CLI solo traduce `ValueError` a código 2, así que el usuario veía un *traceback* en vez del mensaje de error. **Corregí el código**, no la prueba: agregué `_numero()` en `caoslab/configuracion.py`, que lanza `ErrorConfiguracion` nombrando el campo. | `test_un_campo_numerico_con_texto_lanza_error_configuracion`, 16 filas: dos textos por cada uno de los 8 campos numéricos, incluidos los tres del presupuesto |
+| `test_duracion_texto_lanza_error_configuracion`: `duracion_s: treinta` | Conservada, **reveló el defecto D-01** | La prueba falló con `TypeError: '<=' not supported between instances of 'str' and 'int'`. No era un esperado mal puesto: el cargador comparaba el valor con 0 sin revisar que fuera un número, y el CLI solo traduce `ValueError` a código 2, así que el usuario veía un *traceback* en vez del mensaje de error. **Corregí el código**, no la prueba: agregué `_numero()` en `caoslab/configuracion.py` (al integrarse con la revisión de seguridad de la semana 6 quedó como `_validar_numero()`), que lanza `ErrorConfiguracion` nombrando el campo. | `test_un_campo_numerico_con_texto_lanza_error_configuracion`, 16 filas: dos textos por cada uno de los 8 campos numéricos, incluidos los tres del presupuesto |
 | `test_hipotesis_vacia_lanza_error_configuracion`: `hipotesis: ''` | Conservada, **reveló el defecto D-02** | La prueba falló con «DID NOT RAISE». El contrato dice que la hipótesis es obligatoria, y un campo en blanco es lo mismo que no tenerlo: el experimento corría y el informe salía con la sección «Hipótesis» vacía. **Corregí el código**: `_texto()` rechaza los obligatorios en blanco. Lo extendí a `objetivo.url` y `objetivo.contenedor`, que tenían el mismo agujero. | `test_un_campo_de_texto_obligatorio_vacio_lanza_error_configuracion`, 6 filas: cadena vacía y solo espacios por cada uno de los tres campos |
 
 **Decisión:** 4 conservadas (con cambios de forma), 3 corregidas, 4 descartadas.
@@ -337,7 +337,7 @@ por la corrección de D-01 y D-02 en `caoslab/configuracion.py`.
 **Confirmo que no hay datos de personas reales.** CaosLab no maneja personas: lo
 que consume son nombres de contenedores, URLs, hipótesis y números. Los cuatro
 servicios del catálogo imitan negocios del Huila para tener contexto local
-(`pedidos-db`, `inventario-ñapa-db`, `cafe-d'anita-web`, `pagos-pse-api`) pero
+(`caoslab-pedidos-db`, `caoslab-inventario-ñapa-db`, `caoslab-cafe-d'anita-web`, `caoslab-pagos-pse-api`) pero
 ninguno corresponde a un negocio real, y todas las URLs apuntan a `localhost`.
 No hay nombres de personas, ni teléfonos, ni correos, ni cédulas, ni los míos ni
 los de mi familia.
@@ -347,8 +347,8 @@ los de mi familia.
 | Caso difícil | Dónde está | Qué prueba lo usa |
 |---|---|---|
 | Tildes | «caída de la réplica», `/menú`, `categoría=café` | `test_lee_tildes_ene_y_apostrofo_sin_romper_el_texto`, `test_el_informe_conserva_tildes_ene_y_apostrofo` |
-| Ñ | `inventario-ñapa-db`, «señal de inventario» | las mismas dos |
-| Apóstrofo | `cafe-d'anita-web`, «Café D'Anita» | las dos anteriores y `test_el_archivo_del_informe_se_guarda_en_utf8` |
+| Ñ | `caoslab-inventario-ñapa-db`, «señal de inventario» | las mismas dos |
+| Apóstrofo | `caoslab-cafe-d'anita-web`, «Café D'Anita» | las dos anteriores y `test_el_archivo_del_informe_se_guarda_en_utf8` |
 | Texto vacío y solo espacios | `TEXTOS_VACIOS` del conftest | `test_un_campo_de_texto_obligatorio_vacio_lanza_error_configuracion` |
 | Número en cero | latencia 0.0 ms, `max_tasa_error` 0.0, `duracion_s` 0 | `test_limites_de_la_latencia_p95[0.0-…]`, `test_limites_de_la_tasa_de_error[10-0-0.0-…]`, `test_limites_de_los_campos_que_deben_ser_positivos[0-False-*]` |
 | Números negativos | latencias −0.1 y −1000, presupuestos −0.01 y −5 | `test_latencia_negativa_lanza_value_error_nombrando_la_muestra`, `test_presupuesto_invalido_lanza_value_error` |

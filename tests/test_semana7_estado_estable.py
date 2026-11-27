@@ -74,7 +74,7 @@ def test_tabla_de_decision_del_estado_estable(muestras, presupuesto, estado, mot
 
     assert veredicto.estado is estado
     assert len(veredicto.motivos) == len(motivos)
-    for esperado, motivo in zip(motivos, veredicto.motivos):
+    for esperado, motivo in zip(motivos, veredicto.motivos, strict=True):
         assert esperado in motivo
 
 

@@ -14,25 +14,25 @@ from caoslab.modelos import Muestra
 CATALOGO_SINTETICO = [
     {
         "nombre": "pausa de la base de pedidos",
-        "contenedor": "pedidos-db",
+        "contenedor": "caoslab-pedidos-db",
         "url": "http://localhost:8000/pedidos",
         "hipotesis": "Si la base se congela 30 s, la API responde con menos del 5 % de errores.",
     },
     {
         "nombre": "caída de la réplica de la señal de inventario",
-        "contenedor": "inventario-ñapa-db",
+        "contenedor": "caoslab-inventario-ñapa-db",
         "url": "http://localhost:8010/inventario?categoría=café",
         "hipotesis": "La degradación de la réplica no afecta la consulta de artículos.",
     },
     {
         "nombre": "pausa del micrositio Café D'Anita",
-        "contenedor": "cafe-d'anita-web",
+        "contenedor": "caoslab-cafe-d'anita-web",
         "url": "http://localhost:8020/menú",
         "hipotesis": "El micrositio sigue mostrando el menú desde la caché.",
     },
     {
         "nombre": "pausa de la pasarela de pagos PSE",
-        "contenedor": "pagos-pse-api",
+        "contenedor": "caoslab-pagos-pse-api",
         "url": "http://localhost:8030/salud",
         "hipotesis": "Los pagos en curso no se duplican cuando la pasarela se congela.",
     },
@@ -82,7 +82,7 @@ def escribir_experimento(tmp_path):
         campos = {
             "hipotesis": "La API aguanta la pausa de la base.",
             "url": "http://localhost:8000/pedidos",
-            "contenedor": "pedidos-db",
+            "contenedor": "caoslab-pedidos-db",
             "tipo": "pausar",
             "duracion_s": 30,
             "max_tasa_error": 0.05,

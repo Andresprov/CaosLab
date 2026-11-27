@@ -44,7 +44,7 @@ class ClienteFalso:
 
 
 def inyector_con(contenedor):
-    return InyectorPausa("pedidos-db", ClienteFalso(contenedor))
+    return InyectorPausa("caoslab-pedidos-db", ClienteFalso(contenedor))
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +72,7 @@ def test_un_contenedor_que_no_esta_corriendo_lanza_error_inyeccion(status):
 
 
 def test_un_contenedor_que_no_existe_lanza_error_inyeccion():
-    with pytest.raises(ErrorInyeccion, match="no existe el contenedor pedidos-db"):
+    with pytest.raises(ErrorInyeccion, match="no existe el contenedor caoslab-pedidos-db"):
         inyector_con(None).inyectar()
 
 
@@ -141,4 +141,4 @@ def test_despausar_si_quedo_pausado(status, rescatado, despausas_esperadas):
 
 def test_la_descripcion_nombra_el_contenedor_objetivo():
     """El informe y la consola imprimen esta descripción."""
-    assert inyector_con(ContenedorFalso()).descripcion == "pausar el contenedor pedidos-db"
+    assert inyector_con(ContenedorFalso()).descripcion == "pausar el contenedor caoslab-pedidos-db"
