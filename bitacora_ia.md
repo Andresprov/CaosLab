@@ -90,12 +90,108 @@ Asistente usado: Claude (Anthropic), en modo chat y como agente en el IDE
 - **Verificación:** El agente corrió en una carpeta limpia `pip install -r requirements.txt`, `pytest -m "not integracion"` (75 en verde), `ruff check .` (sin avisos) y `pip-audit` (sin vulnerabilidades). Docker no estaba disponible en su entorno, así que las 3 pruebas de integración las corrí yo con Docker encendido antes de integrar.
 - **Commit relacionado:** pull request #1 (`semana-6-revision` → `main`)
 
+## Entradas de la entrega 1: el resto del agente (21 commits)
+
+Estos 21 commits, de `7d843c1` a `caef884`, se hicieron el 2026-11-07 con
+Claude Code como agente, después de cerrar la HU-01. Todos llevan
+`Co-Authored-By: Claude` en el mensaje del commit.
+
+### Entrada 10
+
+- **Fecha:** 2026-11-07
+- **Prompt o sugerencia:** Le pedí al agente que preparara la estructura del proyecto para poder instalarlo y ejecutarlo correctamente, separando la documentación de los módulos y configurando las dependencias, los requisitos de Python y el comando de consola.
+- **Qué hizo la IA:** Sacó los docstrings de `modelos.py` y `estado_estable.py` a `DOCUMENTACION.txt` sin cambiar la lógica, y creó el `pyproject.toml` con el comando `caoslab`, el marcador `integracion`, PyYAML, el SDK de Docker y Python 3.11 como mínimo.
+- **Decisión:** Aceptada
+- **Por qué:** PyYAML era necesario para leer la configuración de los experimentos en YAML, mientras que el SDK de Docker permitía interactuar programáticamente con los contenedores. Separar los docstrings en un archivo de documentación ayudaba a mantener los módulos más limpios sin perder la explicación de su funcionamiento. También era necesario definir una versión mínima de Python y facilitar la ejecución mediante el comando `caoslab`.
+- **Verificación:** Revisé los archivos de configuración y documentación creados, y comprobé que las 12 pruebas de la HU-01 siguieron en verde después del refactor.
+- **Commits relacionados:** `7d843c1`, `65873b3`
+
+### Entrada 11
+
+- **Fecha:** 2026-11-07
+- **Prompt o sugerencia:** Le pedí que creara una aplicación de demostración para probar el comportamiento del sistema ante fallos, usando FastAPI, PostgreSQL y Docker Compose, incluyendo endpoints que permitieran diferenciar entre un servicio independiente de la base de datos y otro que dependiera de ella.
+- **Qué hizo la IA:** Creó la app demo con FastAPI y PostgreSQL en `docker-compose.yml`. `/health` no toca la base de datos; `/pedidos` sí, y usa `connect_timeout` para responder 503 en vez de colgarse cuando la base está pausada.
+- **Decisión:** Aceptada
+- **Por qué:** Se necesitaba un entorno reproducible para probar los experimentos de caos. Tener un endpoint independiente de PostgreSQL y otro que dependiera de ella permitía comprobar que el inyector generara el fallo esperado y que el sistema detectara correctamente los servicios afectados. El `connect_timeout` evitaba que las peticiones quedaran esperando indefinidamente cuando la base de datos no respondiera.
+- **Verificación:** Revisé la estructura de la aplicación y el comportamiento esperado de ambos endpoints. La verificación con Docker real se dejó para las pruebas de integración. La configuración de autenticación `trust` utilizada inicialmente en PostgreSQL se reemplazó posteriormente por una contraseña almacenada en `.env` durante la semana 6 (`eb668a7`).
+- **Commit relacionado:** `26d4426`
+
+### Entrada 12
+
+- **Fecha:** 2026-11-07
+- **Prompt o sugerencia:** Le pedí que implementara la carga y validación inicial del archivo de configuración del experimento `experimento.yaml`, definiendo los campos obligatorios y los valores permitidos, y que primero escribiera las pruebas para comprobar el comportamiento esperado.
+- **Qué hizo la IA:** Escribió primero las pruebas de la configuración (en rojo) y después `cargar_experimento`, que lee `experimento.yaml`. Los campos obligatorios son la hipótesis, `objetivo.url`, `objetivo.contenedor`, `fallo.tipo`, `duracion_s` y el presupuesto; el único fallo aceptado es `pausar`.
+- **Decisión:** Aceptada con cambios
+- **Por qué:** Se necesitaba que los experimentos tuvieran una configuración definida y consistente para evitar errores al ejecutarlos. Se aceptó el enfoque de escribir primero las pruebas y después la implementación, pero la validación inicial no cubría completamente los tipos de datos ni los límites de los valores, por lo que se dejaron esos ajustes pendientes para la semana 6.
+- **Verificación:** Las pruebas pasaron de rojo a verde. La validación de tipos y límites quedó incompleta y se corrigió en la semana 6 (`89430fc`).
+- **Commits relacionados:** `8672459` (en rojo), `ca8a4ea` (en verde)
+
+### Entrada 13
+
+- **Fecha:** 2026-11-07
+- **Prompt o sugerencia:** Le pedí que diseñara el mecanismo de inyección de fallos mediante Docker, definiendo una interfaz común para los inyectores y desarrollando el primer inyector de pausa de contenedores, junto con sus pruebas.
+- **Qué hizo la IA:** Escribió las pruebas del inyector (en rojo) y el `InyectorPausa` con el SDK de Docker. `Inyector` es un `Protocol` con `inyectar()` y `revertir()`, así el motor no depende de un fallo concreto. `revertir()` solo despausa si este inyector pausó y se puede llamar varias veces; `despausar_si_quedo_pausado()` recupera un contenedor que quedó pausado si el proceso murió.
+- **Decisión:** Aceptada con cambios
+- **Por qué:** El uso de un `Protocol` permitía definir un contrato común entre el motor y los distintos tipos de inyectores, sin acoplar el proyecto a una única implementación. Se aceptó el inyector de pausa y su mecanismo de reversión, aunque posteriormente fue necesario reforzar la seguridad para restringir las acciones a contenedores creados para los experimentos de CaosLab.
+- **Verificación:** Las pruebas pasaron de rojo a verde. La restricción a contenedores `caoslab-*` no estaba implementada inicialmente y se agregó en la semana 6 (`4227d7a`).
+- **Commits relacionados:** `e85dc2b` (en rojo), `4a1fb81` (en verde)
+
+### Entrada 14
+
+- **Fecha:** 2026-11-07
+- **Prompt o sugerencia:** Le pedí que implementara la reversión de los fallos de manera segura, garantizando que los contenedores recuperaran su estado incluso ante excepciones, interrupciones del usuario o errores durante la inyección, y que desarrollara pruebas para esos escenarios.
+- **Qué hizo la IA:** Escribió las pruebas de la reversión garantizada (excepción a mitad del experimento, `KeyboardInterrupt`, Ctrl+C durante la línea base y durante el fallo, falla al inyectar, y el manejador de SIGINT restaurado al terminar) con un inyector y una sonda falsos, sin Docker. Después puso `inyector.revertir()` en un `finally` y capturó SIGINT, SIGTERM y SIGBREAK para que marquen una parada ordenada en vez de matar el proceso.
+- **Decisión:** Aceptada
+- **Por qué:** La recuperación del sistema después de un experimento era una prioridad, ya que un fallo inyectado no debía dejar los contenedores en un estado alterado. El uso de `finally` aseguraba que la reversión se intentara incluso cuando ocurrían excepciones, y el manejo de señales permitía finalizar el experimento de forma controlada.
+- **Verificación:** Las 7 pruebas de `test_reversion.py` pasaron de rojo a verde. La reversión quedó cubierta mediante pruebas automatizadas con objetos falsos, aunque no se registró una prueba manual de Ctrl+C contra Docker real.
+- **Commits relacionados:** `e5ca36d` (en rojo), `11e5059` (en verde)
+
+### Entrada 15
+
+- **Fecha:** 2026-11-07
+- **Prompt o sugerencia:** Le pedí que desarrollara la sonda HTTP para medir el comportamiento del servicio durante los experimentos, usando pruebas contra un servidor local y sin añadir dependencias externas, respetando lo establecido en el ADR-001.
+- **Qué hizo la IA:** Escribió las pruebas de la sonda contra un servidor HTTP local (en rojo) y la `SondaHTTP`: un hilo marca el ritmo y un pool de hilos hace las peticiones, para que una petición lenta no baje el número de muestras cuando el servicio se cuelga. Solo usa `urllib`, de acuerdo con el ADR-001.
+- **Decisión:** Aceptada
+- **Por qué:** La sonda debía mantener mediciones periódicas y confiables, incluso cuando el endpoint respondiera lentamente. Separar la planificación de las mediciones de las peticiones mediante hilos ayudaba a mantener el ritmo de muestreo. Se decidió utilizar `urllib` para evitar agregar dependencias innecesarias y cumplir con la decisión arquitectónica del ADR-001.
+- **Verificación:** Las 8 pruebas de `test_sonda.py` pasaron de rojo a verde, incluida la prueba que comprobaba que el ritmo de muestreo se mantuviera frente a un endpoint que tardaba 1 segundo en responder.
+- **Commits relacionados:** `08c142d` (en rojo), `a98e6d6` (en verde)
+
+### Entrada 16
+
+- **Fecha:** 2026-11-07
+- **Prompt o sugerencia:** Le pedí que implementara el motor de ejecución de experimentos, integrando la línea base, la inyección del fallo, el monitoreo por ventanas y la evaluación del estado estable, con pruebas para verificar los distintos resultados posibles.
+- **Qué hizo la IA:** Escribió 8 pruebas del motor (4 en rojo; las otras 4 ya las cumplía el esqueleto de la reversión) y la implementación: cada ventana se evalúa con `evaluar_estado_estable()` sin cambios, si la línea base no da `CONTINUAR` no se inyecta nada, y si ninguna ventana junta evidencia el resultado es `SIN_EVIDENCIA`. Luego refactorizó `_esperar` para calcular el límite con `time.monotonic()` en vez de restar 0.2 s por vuelta, que acumulaba error.
+- **Decisión:** Aceptada con cambios
+- **Por qué:** El motor debía seguir una secuencia controlada de línea base, inyección y evaluación, evitando ejecutar fallos cuando el sistema ya presentaba condiciones inestables. Se aceptó la lógica de evaluación y los resultados definidos, pero se ajustó el método de espera para utilizar tiempo monotónico, evitando errores de acumulación y mejorando la precisión temporal del experimento.
+- **Verificación:** Las pruebas del motor pasaron de rojo a verde y continuaron pasando después del refactor de `_esperar`.
+- **Commits relacionados:** `b7580f2` (en rojo), `e67c7b0` (en verde), `68140ce` (refactor)
+
+### Entrada 17
+
+- **Fecha:** 2026-11-07
+- **Prompt o sugerencia:** Le pedí que desarrollara la generación del informe de resultados en Markdown y el comando de consola `caoslab run`, incluyendo los códigos de salida, el manejo de errores de configuración y Docker, y la visualización del progreso de ejecución.
+- **Qué hizo la IA:** Escribió las pruebas y la implementación del informe en markdown (hipótesis, línea base, ventanas y veredicto) y del comando `caoslab run`, con códigos de salida 0 (superado), 1 (cualquier otro final) y 2 (configuración inválida o Docker sin responder). Después corrigió el CLI para escribir en UTF-8 y mostrar el progreso al instante.
+- **Decisión:** Aceptada con cambios
+- **Por qué:** El informe permitía documentar y analizar los resultados de cada experimento de forma legible, mientras que el comando CLI facilitaba su ejecución sin tener que utilizar directamente los módulos internos. Se aceptó la implementación inicial, pero fue necesario corregir la codificación de salida y la actualización del progreso para que funcionaran correctamente en Windows al redirigir la salida de consola.
+- **Verificación:** Las pruebas pasaron de rojo a verde. Durante la verificación con Docker real y salida redirigida, se detectaron problemas de codificación UTF-8 y de progreso retrasado que no habían sido cubiertos por las pruebas automatizadas, y se corrigieron posteriormente (`b2648da`).
+- **Commits relacionados:** `4294328` y `7185c4f` (informe), `ea21db2` y `84c4365` (CLI), `b2648da` (corrección)
+
+### Entrada 18
+
+- **Fecha:** 2026-11-07
+- **Prompt o sugerencia:** Le pedí que preparara las pruebas de integración de la aplicación demo con Docker, verificando el comportamiento del experimento cuando se pausaba PostgreSQL y cuando se ejecutaba sobre un endpoint independiente de la base de datos, además de completar el README y la documentación de los módulos.
+- **Qué hizo la IA:** Escribió dos pruebas de extremo a extremo, marcadas como `integracion`: una pausa la base y comprueba que el experimento sobre `/pedidos` aborta, y la otra comprueba que `/health` lo supera; en ambas la base termina corriendo. También escribió el README de la entrega 1 y la documentación de cada módulo en `DOCUMENTACION.txt`.
+- **Decisión:** Aceptada
+- **Por qué:** Las pruebas de integración permitían validar el funcionamiento del sistema en un escenario más cercano al real, verificando tanto la detección de fallos como la recuperación del servicio. El README y la documentación facilitaban la instalación, ejecución y comprensión del proyecto para otros usuarios.
+- **Verificación:** Revisé el README y la documentación generada, así como la estructura de las pruebas de integración y sus comprobaciones de recuperación de PostgreSQL. La ejecución de estas pruebas dependía de tener Docker disponible y operativo.
+- **Commits relacionados:** `8393fdb`, `caef884`
+
 ## Resumen
 
 | Decisión | Cantidad |
 |---|---|
-| Aceptadas | 2 |
-| Aceptadas con cambios | 5 |
+| Aceptadas | 7 |
+| Aceptadas con cambios | 9 |
 | Rechazadas | 2 |
 
 ## Errores que atraparon las pruebas
