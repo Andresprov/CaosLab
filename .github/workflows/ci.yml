@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main, semana-6-revision]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  calidad:
+    name: Pruebas unitarias, ruff y pip-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+      - name: ruff
+        run: ruff check .
+      - name: Pruebas unitarias
+        run: pytest -m "not integracion" -v
+      - name: pip-audit (CaosLab)
+        run: pip-audit -r requirements.txt
+      - name: pip-audit (app demo)
+        run: pip-audit -r app_demo/requirements.txt
+
+  integracion:
+    name: Pruebas de integración con Docker
+    runs-on: ubuntu-latest
+    needs: calidad
+    env:
+      POSTGRES_PASSWORD: solo-para-ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+      - name: Levantar la app demo
+        run: |
+          docker compose up -d --build --wait
+          for i in $(seq 1 30); do curl -fs http://localhost:8000/health && exit 0; sleep 2; done
+          exit 1
+      - name: Pruebas de integración
+        run: pytest -m integracion -v
+      - name: Registros de los contenedores
+        if: failure()
+        run: docker compose logs
+      - name: Bajar la app demo
+        if: always()
+        run: docker compose down -v
