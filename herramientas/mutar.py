@@ -1,10 +1,11 @@
 """Guion de la semana 7: aplica una mutación a la vez, corre la suite y deshace el cambio.
 
-Uso: .venv/bin/python herramientas/mutar.py  (desde la raíz del repositorio)
+Uso: python herramientas/mutar.py  (desde la raíz del repositorio)
 Los resultados de cada mutación están en registro_pruebas.md, sección 3.
 """
 import pathlib
 import subprocess
+import sys
 
 MUTACIONES = [
     ("M1", "caoslab/estado_estable.py",
@@ -28,7 +29,8 @@ MUTACIONES = [
      "    total = int(experimento.duracion_s / experimento.ventana_s)",
      "numero de ventanas: ceil por int"),
     ("M6", "caoslab/inyectores.py",
-     "        contenedor = self._buscar()\n        if contenedor.status == \"paused\":\n            contenedor.unpause()",
+     "        contenedor = self._buscar()\n"
+     "        if contenedor.status == \"paused\":\n            contenedor.unpause()",
      "        contenedor = self._buscar()\n        contenedor.unpause()",
      "revertir: despausa sin revisar el estado"),
     ("M7", "caoslab/informe.py",
@@ -44,14 +46,16 @@ MUTACIONES = [
 for codigo, archivo, viejo, nuevo, descripcion in MUTACIONES:
     ruta = pathlib.Path(archivo)
     original = ruta.read_text(encoding="utf-8")
-    assert viejo in original, f"{codigo}: no encontre el fragmento"
+    if viejo not in original:
+        raise SystemExit(f"{codigo}: no encontre el fragmento")
     ruta.write_text(original.replace(viejo, nuevo, 1), encoding="utf-8")
     salida = subprocess.run(
-        [".venv/bin/python", "-m", "pytest", "-q", "-m", "not integracion", "--no-header", "-p", "no:cacheprovider"],
+        [sys.executable, "-m", "pytest", "-q", "-m", "not integracion", "--no-header", "-p", "no:cacheprovider"],
         capture_output=True, text=True,
     ).stdout
-    fallidas = [l.split(" ")[1] for l in salida.splitlines() if l.startswith("FAILED")]
-    resumen = [l for l in salida.splitlines() if "passed" in l or "failed" in l][-1]
+    lineas = salida.splitlines()
+    fallidas = [linea.split(" ")[1] for linea in lineas if linea.startswith("FAILED")]
+    resumen = [linea for linea in lineas if "passed" in linea or "failed" in linea][-1]
     ruta.write_text(original, encoding="utf-8")
     print(f"### {codigo} | {archivo} | {descripcion}")
     print(f"    {resumen.strip()}")
