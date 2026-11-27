@@ -1,0 +1,26 @@
+# Demostración del caso que SALE BIEN: /health no consulta la base de datos.
+# Con caoslab-db pausada, /health sigue respondiendo normal. Resultado
+# esperado: SUPERADO (código de salida 0) y la base vuelve a quedar corriendo.
+nombre: health con la base pausada
+
+hipotesis: >
+  Si la base de datos queda congelada 20 segundos, el endpoint /health sigue
+  respondiendo con menos de 5 % de errores y un p95 por debajo de 500 ms.
+
+objetivo:
+  url: http://localhost:8000/health
+  contenedor: caoslab-db
+
+fallo:
+  tipo: pausar
+
+duracion_s: 20
+linea_base_s: 6
+ventana_s: 5
+peticiones_por_segundo: 5
+timeout_s: 2
+
+presupuesto:
+  max_tasa_error: 0.05
+  max_latencia_p95_ms: 500
+  minimo_muestras: 10

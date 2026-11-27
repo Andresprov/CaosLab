@@ -78,6 +78,21 @@ docker compose down              # al terminar
 
 El informe sale en consola y queda en `informe.md`.
 
+### Demostración: un experimento que falla y uno que sale bien
+
+Los dos pausan `caoslab-db` durante 20 segundos. Cambia solo el endpoint que se
+mide:
+
+```bash
+caoslab run experimentos/falla_pedidos.yaml --informe informe_falla.md
+# /pedidos depende de la base: responde 503 y el experimento termina ABORTADO (código 1)
+
+caoslab run experimentos/supera_health.yaml --informe informe_supera.md
+# /health no depende de la base: el experimento termina SUPERADO (código 0)
+
+docker ps    # en los dos casos caoslab-db vuelve a quedar Up, no Paused
+```
+
 | Código de salida | Significa |
 |---|---|
 | `0` | Superado: el sistema aguantó el fallo dentro del presupuesto. |
