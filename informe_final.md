@@ -3,12 +3,12 @@
 Proyecto: CaosLab, agente de pruebas de caos controlado sobre una aplicación en Docker
 Estudiante: Andrés David Trujillo
 Repositorio: https://github.com/Andresprov/CaosLab
-Fecha: 2026-11-26
+Fecha: 2026-11-27
 
 > Este informe lo llenamos entre los dos, Claude Code (agente) y yo. El agente
 > lo redactó a partir del repositorio y de lo que yo había escrito en la
-> bitácora (las entradas 1 a 18 y la reflexión final); yo lo revisé y ajusté
-> antes de entregarlo. Registro en la [bitácora, entrada 19](bitacora_ia.md).
+> bitácora (las entradas 1 a 21 y la reflexión final); yo lo revisé y ajusté
+> antes de entregarlo. Registro en la [bitácora, entrada 22](bitacora_ia.md).
 
 ## 1. Resumen
 
@@ -20,8 +20,9 @@ experimento en cuanto el daño supera el presupuesto de error aceptado. El fallo
 siempre se revierte y queda un informe en markdown. Usé IA (Claude) en los
 requisitos, el diseño, el código, las pruebas, la revisión de seguridad, la
 documentación y la redacción de este informe. La verificación se apoyó en
-pruebas escritas antes del código: 81 pruebas unitarias y 3 de integración
-pasan, ruff y pip-audit quedan limpios, y las pruebas atraparon un error de la
+pruebas escritas antes del código: 234 pruebas unitarias y 3 de integración
+pasan en el pipeline de GitHub Actions, ruff y pip-audit quedan limpios, ocho
+mutaciones introducidas a propósito fueron detectadas y las pruebas atraparon un error de la
 IA en el cálculo del p95 que habría abortado experimentos sanos.
 
 ## 2. Problema y usuario
@@ -51,8 +52,8 @@ ajenos: solo trabaja sobre la copia local.
 | 2. Requisitos | Pedí casos de prueba de límite para el contrato de la HU-01; acepté 3 de 7 y descarté 4 que eran de otro contrato. | Claude (chat) | [docs/contrato_hu01.md](docs/contrato_hu01.md), [bitácora, entrada 1](bitacora_ia.md) | Comparé cada caso con la tabla de casos límite del contrato |
 | 3. Diseño | La IA propuso `numpy.percentile()`; lo rechacé por el ADR-001 (solo librería estándar). | Claude (chat) | [bitácora, entrada 2](bitacora_ia.md), ADR-001 (módulo 3) | Comparé contra el ADR-001 y la documentación de numpy |
 | 4. Código | La IA implementó `evaluar_estado_estable()` y, como agente, el inyector, la reversión, la sonda, el motor, el informe y el CLI; yo corregí y ajusté lo que generó | Claude (chat) y Claude Code (agente) | [bitácora, entradas 3 a 5 y 10 a 17](bitacora_ia.md), [caoslab/](caoslab/) | Pruebas escritas antes del código (commits en rojo y en verde) |
-| 5. Pruebas | Pruebas unitarias, de reversión con dobles en memoria, de abuso y de extremo a extremo con Docker | Claude Code (agente) | [tests/](tests/), [bitácora, entrada 18](bitacora_ia.md) | `pytest`: 81 unitarias y 3 de integración en verde; ninguna aserción se cambió para que pasara |
-| 6. Operación | Revisión de seguridad con IA, correcciones en rama propia y pull request; despliegue de la app demo con Docker Compose | Claude (chat), Claude Code, ruff, pip-audit | [revision_seguridad.md](revision_seguridad.md), [docker-compose.yml](docker-compose.yml), [bitácora, entradas 7 a 9](bitacora_ia.md) | Cada hallazgo se comprobó ejecutando el código; pip-audit encontró lo que la IA no vio |
+| 5. Pruebas | Pruebas unitarias, de reversión con dobles en memoria, de abuso y de extremo a extremo con Docker; en la semana 7, una suite con particiones de equivalencia, valores límite, tablas de decisión y datos sintéticos | Claude Code (agente) y Claude (chat) | [tests/](tests/), [registro_pruebas.md](registro_pruebas.md), [bitácora, entradas 18 a 21](bitacora_ia.md) | `pytest`: 234 unitarias y 3 de integración en verde; ninguna aserción se cambió para que pasara; 8 de 8 mutaciones detectadas con [herramientas/mutar.py](herramientas/mutar.py) |
+| 6. Operación | Revisión de seguridad con IA, correcciones en rama propia y pull request; despliegue de la app demo con Docker Compose; pipeline de integración continua | Claude (chat), Claude Code, ruff, pip-audit, GitHub Actions | [revision_seguridad.md](revision_seguridad.md), [docker-compose.yml](docker-compose.yml), [ci.yml](.github/workflows/ci.yml), [bitácora, entradas 7 a 9 y 23](bitacora_ia.md) | Cada hallazgo se comprobó ejecutando el código; pip-audit encontró lo que la IA no vio |
 
 ## 4. Verificación: lo que la IA hizo mal y cómo lo encontré
 
@@ -88,6 +89,14 @@ ajenos: solo trabaja sobre la copia local.
 - **Cómo lo detecté:** comparé cada caso con la tabla de casos límite del contrato.
 - **Qué hice:** conservé tres casos, reescribí el del pico aislado con números que muestran la diferencia entre las dos formas de calcular el percentil (el que luego atrapó el Caso 1) y descarté los otros. Commit: [`d2bd7ef`](https://github.com/Andresprov/CaosLab/commit/d2bd7ef).
 
+### Caso 5: pruebas generadas sin el contrato, con el esperado al revés
+
+- **Fase:** pruebas
+- **Qué propuso la IA:** con un prompt sin el contrato («escribe las pruebas con pytest para `evaluar_estado_estable()` y `cargar_experimento()`»), 11 pruebas.
+- **Qué estaba mal:** 4 eran débiles (`is not None`, `isinstance(..., float)`, un `pytest.raises(Exception)`) y no fallaban con ninguna mutación. 3 tenían el esperado al revés de la regla: la lista vacía lanzando error en vez de devolver `MUESTRAS_INSUFICIENTES`, el borde inclusivo abortando y el p95 interpolado como numpy, el mismo error del Caso 1.
+- **Cómo lo detecté:** comparé el esperado de cada prueba con el contrato y apliqué ocho mutaciones al código para ver qué pruebas fallaban. Las débiles no fallaban con ninguna.
+- **Qué hice:** descarté las débiles y corregí las 3 contra el contrato. Con el contrato en el prompt, la segunda generación salió casi bien. Dos pruebas del borrador sí encontraron defectos reales en `cargar_experimento()` (un número escrito como texto se escapaba como `TypeError` y una hipótesis en blanco pasaba): corregí el código, no las pruebas. Detalle: [registro_pruebas.md](registro_pruebas.md), [bitácora, entrada 20](bitacora_ia.md); commits [`38cc454`](https://github.com/Andresprov/CaosLab/commit/38cc454) y [`5fb5c70`](https://github.com/Andresprov/CaosLab/commit/5fb5c70).
+
 ## 5. Estado final del sistema
 
 - **Arquitectura:** un motor (`motor.py`) coordina tres piezas intercambiables: una sonda HTTP (`sonda.py`) que mide a ritmo fijo con un hilo y un pool, un inyector (`inyectores.py`) definido como `Protocol` con `inyectar()` y `revertir()`, y la evaluación pura del estado estable (`estado_estable.py`). La reversión va en un `finally` y las señales de parada piden una salida ordenada. El CLI (`cli.py`) carga `experimento.yaml`, corre el motor y escribe el informe. Detalle en [README.md](README.md) y [DOCUMENTACION.txt](DOCUMENTACION.txt).
@@ -96,12 +105,11 @@ ajenos: solo trabaja sobre la copia local.
   - Comando `caoslab run` con informe en consola y en archivo: terminado.
   - Inyección de fallo por pausa de contenedor con reversión garantizada: terminada.
   - HU-04, aprobación humana antes de inyectar: pendiente (ver abajo).
-- **Pruebas:** 81 pruebas unitarias y 3 de integración con Docker, todas en verde. Las 12 de la HU-01 no cambiaron desde que se escribieron. ruff (reglas E, F, B y S) sin avisos y pip-audit sin vulnerabilidades. La cobertura no se midió con una herramienta; la lógica del negocio (`estado_estable.py` y `motor.py`) tiene pruebas para cada caso del contrato y para cada final posible del experimento. El repositorio no tiene pipeline de integración continua, así que no hay enlace a una ejecución.
+- **Pruebas:** 234 pruebas unitarias y 3 de integración con Docker, todas en verde. Las 12 de la HU-01 no cambiaron desde que se escribieron. ruff (reglas E, F, B y S) sin avisos y pip-audit sin vulnerabilidades. La cobertura no se midió con una herramienta de cobertura de líneas; en su lugar, la lógica del negocio (`estado_estable.py`, `configuracion.py`, `motor.py`, `inyectores.py` e `informe.py`) se probó con particiones, valores límite y tablas de decisión, y las 8 mutaciones de [herramientas/mutar.py](herramientas/mutar.py) hacen fallar al menos una prueba cada una ([registro_pruebas.md](registro_pruebas.md)). El pipeline de [GitHub Actions](.github/workflows/ci.yml) corre ruff, las pruebas unitarias, pip-audit y las pruebas de integración con la app demo levantada en Docker. Ejecuciones sobre `main`: [Actions, ci.yml](https://github.com/Andresprov/CaosLab/actions/workflows/ci.yml?query=branch%3Amain).
 - **Pendientes:**
   - HU-04, aprobación humana antes de inyectar el fallo: quedó para la entrega 2 porque es una historia completa, no una corrección.
   - Permiso por etiqueta `caoslab.permitido=true` en lugar del prefijo `caoslab-`, que es débil (RNF-04): requiere cambiar el doble de prueba `ContenedorFalso`.
   - Otros fallos (latencia, CPU, kill): el `Protocol` del inyector ya los permite sin tocar el motor.
-  - Pipeline de integración continua que corra pytest, ruff y pip-audit en cada pull request.
 
 ## 6. Reflexión ética y legal
 
@@ -155,4 +163,6 @@ corra pytest, ruff y pip-audit en cada pull request.
 - Bitácora de uso de IA: [bitacora_ia.md](bitacora_ia.md)
 - Contrato de la HU-01: [docs/contrato_hu01.md](docs/contrato_hu01.md)
 - Revisión de código y seguridad: [revision_seguridad.md](revision_seguridad.md)
+- Diseño y revisión de las pruebas (semana 7): [registro_pruebas.md](registro_pruebas.md)
+- Pipeline de integración continua: [.github/workflows/ci.yml](.github/workflows/ci.yml)
 - Documentación de los módulos: [DOCUMENTACION.txt](DOCUMENTACION.txt)

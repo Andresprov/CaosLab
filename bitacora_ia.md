@@ -186,9 +186,43 @@ Claude Code como agente, después de cerrar la HU-01. Todos llevan
 - **Verificación:** Revisé el README y la documentación generada, así como la estructura de las pruebas de integración y sus comprobaciones de recuperación de PostgreSQL. La ejecución de estas pruebas dependía de tener Docker disponible y operativo.
 - **Commits relacionados:** `8393fdb`, `caef884`
 
+## Entradas de la semana 7: suite de pruebas con IA
+
+Funcionalidad probada: las reglas de negocio de CaosLab (estado estable,
+configuración, conclusión del experimento, inyector y informe).
+Asistente usado: Claude (Anthropic), en modo chat y como agente en el IDE.
+Entrega relacionada: `registro_pruebas.md` y `tests/test_semana7_*.py`.
+
+### Entrada 19 — diseño de los casos de prueba
+
+- **Fecha:** 2026-11-22
+- **Prompt o sugerencia:** «Esta es la regla de `evaluar_estado_estable()` tal como está en el contrato del README, incluida la nota del ADR-002 de que el umbral es inclusivo. Propón los casos de prueba usando particiones de equivalencia, valores límite y una tabla de decisión. Para cada caso dime de qué parte de la regla sale el esperado. No escribas código todavía y no toques mi implementación.»
+- **Decisión:** Aceptada con cambios
+- **Por qué:** La tabla de decisión que propuso tenía las tres condiciones correctas (muestras suficientes, tasa por encima del umbral, p95 por encima del umbral) y la simplificación de que con C1 en «no» las otras dos no importan, que es la que reduce ocho combinaciones a cinco reglas. Eso lo acepté tal cual. Lo que cambié fueron los valores límite: proponía bordes con 10 muestras, donde la tasa de error salta de 0.10 en 0.10 y no se puede poner un caso «justo en el umbral» distinto del «justo por debajo». Los rehice con 20 muestras para que 2/20 dé exactamente 0.10 y 3/20 dé 0.15, y así los tres valores del borde (debajo, exacto, encima) quedaran separados de verdad. También agregué por mi cuenta las particiones de `max_tasa_error = 0.0` y `= 1.0`, que son bordes válidos que el contrato nombra y que la propuesta se había saltado, y la fila de n = 20 del percentil, que es donde las dos fórmulas de percentil se separan.
+- **Verificación:** Revisé la propuesta con las cinco preguntas de la semana. Particiones: faltaban los dos bordes válidos del presupuesto, los agregué. Límites: estaban mal elegidos por el tamaño de la muestra, los rehice. Origen del esperado: pedí que cada caso dijera de qué parte del contrato salía y verifiqué las 30 filas contra el README; las dos que no podía ubicar en ninguna fila del contrato («muestras con marca de tiempo» y «ventanas solapadas») las descarté, igual que en la semana 5. Ambigüedades: encontré dos que el contrato no resuelve (el orden de validación cuando el presupuesto y las muestras están mal a la vez, y que el rango del presupuesto no se valida al leer el YAML); las dos quedaron anotadas en la sección 1.1 del registro y una de ellas, a propósito, **sin** prueba. Reglas inventadas: ninguna que se me haya colado a la suite.
+- **Commit relacionado:** `docs: tabla de casos de la semana 7 con particiones, límites y tablas de decisión`
+
+### Entrada 20 — generación de las pruebas
+
+- **Fecha:** 2026-11-22
+- **Prompt o sugerencia:** Primero, a propósito, el prompt flojo: «Escribí las pruebas con pytest para `evaluar_estado_estable()` y `cargar_experimento()` de CaosLab», sin pasarle el contrato. Después el bueno: «Con esta regla y esta tabla de casos ya revisada, escribí las pruebas con pytest. Exijo `@pytest.mark.parametrize` con un comentario por fila que diga qué partición o qué borde es, `pytest.approx` para los decimales, `pytest.raises` con el tipo de error exacto y `match` del campo que está mal, y esperados fijos escritos a mano. No modifiques mi código.»
+- **Decisión:** Aceptada con cambios
+- **Por qué:** Hice los dos prompts para poder comparar, y la diferencia fue el punto de la tarea. El borrador sin contrato dio 11 pruebas: 4 eran débiles de una forma que no se nota leyendo rápido (`is not None`, `isinstance(..., float)`, `estado in (los tres estados que existen)` y un `pytest.raises(Exception)`), y 3 tenían el esperado al revés de la regla: la lista vacía lanzando error en vez de devolver `MUESTRAS_INSUFICIENTES`, el borde inclusivo abortando y el p95 interpolado al estilo de numpy. Esa última es exactamente la que me costó un defecto en la semana 5, así que el asistente repite el mismo error cuando no tiene la regla delante. Con el contrato pegado, la segunda generación salió casi derecha y lo que corregí fue forma: ids de parametrize legibles y comentarios por fila. El detalle de las 11 pruebas, con qué hice con cada una, está en la sección 2 del registro.
+- **Verificación:** Apliqué las tres preguntas a cada prueba. ¿El esperado sale de la regla? Las 3 que no, las corregí contra el README, no contra lo que devolvía el código. ¿Fallaría si rompo el código? Las 4 débiles no fallaban con ninguna de las 8 mutaciones que después probé, así que las descarté; las 8 mutaciones de la sección 3 del registro son la respuesta a esta pregunta para el resto de la suite, y las 8 cayeron. ¿Cubre algo que otra prueba no cubra? Descarté lo que no agregaba ninguna fila de mis tablas. Dos pruebas del borrador fallaron pero **no** por un esperado mal puesto, sino porque encontraron defectos reales en `cargar_experimento()`: un campo numérico con texto se escapaba como `TypeError` en vez de `ErrorConfiguracion` (y el CLI solo traduce `ValueError` a código 2, así que el usuario veía un traceback), y una hipótesis en blanco pasaba la validación de campo obligatorio. Corregí el código, no las pruebas, y lo anoté como D-01 y D-02.
+- **Commit relacionado:** `test: suite de la semana 7 con parametrize y tablas de decisión` y `fix: valida el tipo y los obligatorios en blanco al cargar el experimento`
+
+### Entrada 21 — generación de los datos de prueba sintéticos
+
+- **Fecha:** 2026-11-22
+- **Prompt o sugerencia:** «Necesito datos sintéticos para los fixtures de pytest de CaosLab. El proyecto no maneja personas: consume nombres de contenedores, URLs, hipótesis y métricas. Dame cuatro experimentos inventados con contexto de negocios del Huila y que entre ellos cubran tildes, ñ y apóstrofo en el nombre del contenedor y en la URL. Nada de nombres de personas, teléfonos ni correos, ni siquiera inventados.»
+- **Decisión:** Aceptada con cambios
+- **Por qué:** La primera versión traía los datos difíciles solo en los nombres bonitos («caída de la réplica») y dejaba los contenedores y las URLs en ASCII limpio, que es justo donde un problema de codificación duele, porque esos dos campos viajan a Docker y a la sonda. Los reescribí para meter la ñ y el apóstrofo dentro del identificador (`inventario-ñapa-db`, `cafe-d'anita-web`) y los acentos dentro de la URL (`/menú`, `categoría=café`). También le quité una propuesta de incluir nombres de dueños de negocio: aunque fueran inventados, la regla de la tarea es no tener datos que parezcan de personas, y para probar un informe no hacen falta. Lo que agregué yo fueron los casos numéricos, que no había pedido en el prompt y no aparecieron: el cero (latencia 0 ms, `max_tasa_error` 0.0, `duracion_s` 0), los negativos y el volumen de 301 muestras con un pico aislado.
+- **Verificación:** Los cuatro experimentos pasan por `cargar_experimento()` y por `generar_informe()` en `test_lee_tildes_ene_y_apostrofo_sin_romper_el_texto` y `test_el_informe_conserva_tildes_ene_y_apostrofo`, que comparan el texto leído y el texto impreso carácter por carácter contra el dato de entrada, así que si algo se corrompiera en el camino la prueba lo diría. El informe también se escribe a disco y se vuelve a leer en UTF-8 en `test_el_archivo_del_informe_se_guarda_en_utf8`. Revisé el conftest entero para confirmar que no quedó ningún nombre de persona, teléfono, correo ni documento, y que todas las URLs son `localhost`. Está anotado en la sección 4 del registro.
+- **Commit relacionado:** `test: datos de prueba sintéticos con tildes, ñ, apóstrofo y volumen`
+
 ## Entradas del informe final
 
-### Entrada 19
+### Entrada 22
 
 - **Fecha:** 2026-11-26
 - **Prompt o sugerencia:** Le pedí a Claude Code que llenara conmigo la plantilla `informe_final_integrador.md` del proyecto integrador, usando el repositorio y lo que yo había escrito en la bitácora.
@@ -198,12 +232,22 @@ Claude Code como agente, después de cerrar la HU-01. Todos llevan
 - **Verificación:** El agente corrió `pytest -m "not integracion"` (81 en verde) para las cifras del estado final. Revisé que cada caso de la sección 4 coincidiera con su entrada de la bitácora y con su commit.
 - **Commit relacionado:** el commit que agrega `informe_final.md`
 
+### Entrada 23
+
+- **Fecha:** 2026-11-27
+- **Prompt o sugerencia:** Le pasé a Claude Code la lista de entregables finales (informe en PDF, repositorio con la bitácora y la última ejecución del pipeline, diapositivas y sustentación) y le pedí que hiciera lo que faltaba y subiera a `main` solo lo relevante para el repositorio.
+- **Qué hizo la IA:** Notó que el repositorio no tenía pipeline y escribió `.github/workflows/ci.yml` con dos trabajos: ruff, pruebas unitarias y pip-audit, y las pruebas de integración con la app demo levantada en Docker. Integró en `semana-6-revision` la semana 7 que estaba en `main` y resolvió dos conflictos. En `configuracion.py` conservó la validación de la semana 6 (URL local, prefijo `caoslab-`, límites) y le sumó la de la semana 7 (textos obligatorios en blanco y tipo del número en el mensaje). En el README juntó las dos versiones. Al integrar fallaron 50 pruebas de la semana 7 porque sus datos sintéticos usaban contenedores sin el prefijo `caoslab-` que exige la revisión de seguridad; les agregó el prefijo a los datos, no quitó la regla. Corrigió los 5 avisos de ruff de la semana 7 (en `herramientas/mutar.py` y un `zip()` sin `strict`) e hizo que `mutar.py` use el Python con que se ejecuta en vez de `.venv/bin/python`. Renumeró las entradas de la semana 7 (antes 4 a 6, repetidas) como 19 a 21 y actualizó en el informe final las cifras de pruebas y el enlace al pipeline.
+- **Decisión:** Aceptada
+- **Por qué:** La entrega pide el enlace a la última ejecución del pipeline y no existía. La regla del prefijo `caoslab-` es un control de seguridad (RNF-04), así que lo que tenía que cambiar eran los datos de prueba y no el código.
+- **Verificación:** Después del merge pasan 234 pruebas unitarias (228 sin FastAPI, que es como corren en el pipeline), ruff queda sin avisos y `python herramientas/mutar.py` sigue matando las 8 mutaciones. El pipeline corrió en GitHub Actions sobre `main`; el enlace está en la sección 5 del informe final.
+- **Commits relacionados:** el commit del pipeline y el merge de `main` en `semana-6-revision`
+
 ## Resumen
 
 | Decisión | Cantidad |
 |---|---|
-| Aceptadas | 7 |
-| Aceptadas con cambios | 10 |
+| Aceptadas | 8 |
+| Aceptadas con cambios | 13 |
 | Rechazadas | 2 |
 
 ## Errores que atraparon las pruebas
@@ -246,39 +290,3 @@ La próxima vez voy a pegar el contrato completo en el prompt desde el primer
 mensaje y no solo la firma, porque la mitad de lo que tuve que corregir eran
 cosas que el contrato ya resolvía. Y voy a pedirle al asistente que me explique
 el cálculo antes de aceptarlo, no después de que falle una prueba.
-
----
-
-# Semana 7 — suite de pruebas del proyecto con IA
-
-Funcionalidad probada: las reglas de negocio de CaosLab (estado estable,
-configuración, conclusión del experimento, inyector y informe).
-Asistente usado: Claude (Anthropic), en modo chat y como agente en el IDE.
-Entrega relacionada: `registro_pruebas.md` y `tests/test_semana7_*.py`.
-
-### Entrada 4 — diseño de los casos de prueba
-
-- **Fecha:** 2026-11-22
-- **Prompt o sugerencia:** «Esta es la regla de `evaluar_estado_estable()` tal como está en el contrato del README, incluida la nota del ADR-002 de que el umbral es inclusivo. Propón los casos de prueba usando particiones de equivalencia, valores límite y una tabla de decisión. Para cada caso dime de qué parte de la regla sale el esperado. No escribas código todavía y no toques mi implementación.»
-- **Decisión:** Aceptada con cambios
-- **Por qué:** La tabla de decisión que propuso tenía las tres condiciones correctas (muestras suficientes, tasa por encima del umbral, p95 por encima del umbral) y la simplificación de que con C1 en «no» las otras dos no importan, que es la que reduce ocho combinaciones a cinco reglas. Eso lo acepté tal cual. Lo que cambié fueron los valores límite: proponía bordes con 10 muestras, donde la tasa de error salta de 0.10 en 0.10 y no se puede poner un caso «justo en el umbral» distinto del «justo por debajo». Los rehice con 20 muestras para que 2/20 dé exactamente 0.10 y 3/20 dé 0.15, y así los tres valores del borde (debajo, exacto, encima) quedaran separados de verdad. También agregué por mi cuenta las particiones de `max_tasa_error = 0.0` y `= 1.0`, que son bordes válidos que el contrato nombra y que la propuesta se había saltado, y la fila de n = 20 del percentil, que es donde las dos fórmulas de percentil se separan.
-- **Verificación:** Revisé la propuesta con las cinco preguntas de la semana. Particiones: faltaban los dos bordes válidos del presupuesto, los agregué. Límites: estaban mal elegidos por el tamaño de la muestra, los rehice. Origen del esperado: pedí que cada caso dijera de qué parte del contrato salía y verifiqué las 30 filas contra el README; las dos que no podía ubicar en ninguna fila del contrato («muestras con marca de tiempo» y «ventanas solapadas») las descarté, igual que en la semana 5. Ambigüedades: encontré dos que el contrato no resuelve (el orden de validación cuando el presupuesto y las muestras están mal a la vez, y que el rango del presupuesto no se valida al leer el YAML); las dos quedaron anotadas en la sección 1.1 del registro y una de ellas, a propósito, **sin** prueba. Reglas inventadas: ninguna que se me haya colado a la suite.
-- **Commit relacionado:** `docs: tabla de casos de la semana 7 con particiones, límites y tablas de decisión`
-
-### Entrada 5 — generación de las pruebas
-
-- **Fecha:** 2026-11-22
-- **Prompt o sugerencia:** Primero, a propósito, el prompt flojo: «Escribí las pruebas con pytest para `evaluar_estado_estable()` y `cargar_experimento()` de CaosLab», sin pasarle el contrato. Después el bueno: «Con esta regla y esta tabla de casos ya revisada, escribí las pruebas con pytest. Exijo `@pytest.mark.parametrize` con un comentario por fila que diga qué partición o qué borde es, `pytest.approx` para los decimales, `pytest.raises` con el tipo de error exacto y `match` del campo que está mal, y esperados fijos escritos a mano. No modifiques mi código.»
-- **Decisión:** Aceptada con cambios
-- **Por qué:** Hice los dos prompts para poder comparar, y la diferencia fue el punto de la tarea. El borrador sin contrato dio 11 pruebas: 4 eran débiles de una forma que no se nota leyendo rápido (`is not None`, `isinstance(..., float)`, `estado in (los tres estados que existen)` y un `pytest.raises(Exception)`), y 3 tenían el esperado al revés de la regla: la lista vacía lanzando error en vez de devolver `MUESTRAS_INSUFICIENTES`, el borde inclusivo abortando y el p95 interpolado al estilo de numpy. Esa última es exactamente la que me costó un defecto en la semana 5, así que el asistente repite el mismo error cuando no tiene la regla delante. Con el contrato pegado, la segunda generación salió casi derecha y lo que corregí fue forma: ids de parametrize legibles y comentarios por fila. El detalle de las 11 pruebas, con qué hice con cada una, está en la sección 2 del registro.
-- **Verificación:** Apliqué las tres preguntas a cada prueba. ¿El esperado sale de la regla? Las 3 que no, las corregí contra el README, no contra lo que devolvía el código. ¿Fallaría si rompo el código? Las 4 débiles no fallaban con ninguna de las 8 mutaciones que después probé, así que las descarté; las 8 mutaciones de la sección 3 del registro son la respuesta a esta pregunta para el resto de la suite, y las 8 cayeron. ¿Cubre algo que otra prueba no cubra? Descarté lo que no agregaba ninguna fila de mis tablas. Dos pruebas del borrador fallaron pero **no** por un esperado mal puesto, sino porque encontraron defectos reales en `cargar_experimento()`: un campo numérico con texto se escapaba como `TypeError` en vez de `ErrorConfiguracion` (y el CLI solo traduce `ValueError` a código 2, así que el usuario veía un traceback), y una hipótesis en blanco pasaba la validación de campo obligatorio. Corregí el código, no las pruebas, y lo anoté como D-01 y D-02.
-- **Commit relacionado:** `test: suite de la semana 7 con parametrize y tablas de decisión` y `fix: valida el tipo y los obligatorios en blanco al cargar el experimento`
-
-### Entrada 6 — generación de los datos de prueba sintéticos
-
-- **Fecha:** 2026-11-22
-- **Prompt o sugerencia:** «Necesito datos sintéticos para los fixtures de pytest de CaosLab. El proyecto no maneja personas: consume nombres de contenedores, URLs, hipótesis y métricas. Dame cuatro experimentos inventados con contexto de negocios del Huila y que entre ellos cubran tildes, ñ y apóstrofo en el nombre del contenedor y en la URL. Nada de nombres de personas, teléfonos ni correos, ni siquiera inventados.»
-- **Decisión:** Aceptada con cambios
-- **Por qué:** La primera versión traía los datos difíciles solo en los nombres bonitos («caída de la réplica») y dejaba los contenedores y las URLs en ASCII limpio, que es justo donde un problema de codificación duele, porque esos dos campos viajan a Docker y a la sonda. Los reescribí para meter la ñ y el apóstrofo dentro del identificador (`inventario-ñapa-db`, `cafe-d'anita-web`) y los acentos dentro de la URL (`/menú`, `categoría=café`). También le quité una propuesta de incluir nombres de dueños de negocio: aunque fueran inventados, la regla de la tarea es no tener datos que parezcan de personas, y para probar un informe no hacen falta. Lo que agregué yo fueron los casos numéricos, que no había pedido en el prompt y no aparecieron: el cero (latencia 0 ms, `max_tasa_error` 0.0, `duracion_s` 0), los negativos y el volumen de 301 muestras con un pico aislado.
-- **Verificación:** Los cuatro experimentos pasan por `cargar_experimento()` y por `generar_informe()` en `test_lee_tildes_ene_y_apostrofo_sin_romper_el_texto` y `test_el_informe_conserva_tildes_ene_y_apostrofo`, que comparan el texto leído y el texto impreso carácter por carácter contra el dato de entrada, así que si algo se corrompiera en el camino la prueba lo diría. El informe también se escribe a disco y se vuelve a leer en UTF-8 en `test_el_archivo_del_informe_se_guarda_en_utf8`. Revisé el conftest entero para confirmar que no quedó ningún nombre de persona, teléfono, correo ni documento, y que todas las URLs son `localhost`. Está anotado en la sección 4 del registro.
-- **Commit relacionado:** `test: datos de prueba sintéticos con tildes, ñ, apóstrofo y volumen`
